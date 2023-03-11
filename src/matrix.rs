@@ -18,6 +18,10 @@ where
         Matrix { data: [0; R * C] }
     }
 
+    pub fn from_data(data: [u32; R * C]) -> Matrix<R, C> {
+        Matrix { data }
+    }
+
     pub fn random<A: CryptoRng + RngCore>(rng: &mut A, logp: usize) -> Matrix<R, C> {
         let last = ((1u64 << logp) - 1) as u32;
         let distr = Uniform::new_inclusive(0, last);

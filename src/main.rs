@@ -126,7 +126,7 @@ where
     }
 
     pub fn delta(&self) -> u32 {
-        (1 << LOGQ) / (P as u32)
+        ((1u64 << LOGQ) / (P as u64)) as u32
     }
 
     pub fn scale_down(&self, value: u32) -> u32 {
@@ -137,19 +137,38 @@ where
 
 fn main() {
     // log of ciphertext modulus
-    const LOGQ: u32 = 1;
-    const DELTA: u32 = (1 << LOGQ) / LOGP;
+    const LOGQ: usize = 32;
 
     // plaintext modulus
-    const P: u32 = 890;
-    const LOGP: u32 = 10;
+    const P: usize = 276;
 
     // Database params
-    const DIM_DB: usize = 100;
-    const DIM_DB_SQRT: usize = 10;
+    const ENTRIES: usize = 1 << 18;
+    const DIM_DB: usize = 1 << 9;
 
     // n param of lwe
     const N: usize = 10;
     /// variance
     const VARIANCE: usize = 10;
+
+    let mut rng = thread_rng();
+    let mut entries = [0u32; ENTRIES];
+    let distr = Uniform::new(0, 276u32);
+    entries.iter_mut().for_each(|v| *v = rng.sample(distr));
+    let db = Matrix::<DIM_DB, DIM_DB>::from_data(entries);
+
+    let server = Server::<DIM_DB, N, LOGQ>::setup(db, &mut rng);
+    let client = Client::<DIM_DB, N, LOGQ, P>::new(&server);
+
+    for i in 0..1000 {
+        let index = rng.sample(Uniform::new(0, ENTRIES));
+        let query_state = client.query(&mut rng, index);
+        let mut now = std::time::Instant::now();
+        let ans = server.answer(&query_state.query);
+        println!("Server response time: {:?}", now.elapsed());
+        now = std::time::Instant::now();
+        let res = client.recover(&query_state, &ans);
+        println!("Client recover time: {:?}", now.elapsed());
+        assert_eq!(res, entries[index]);
+    }
 }
