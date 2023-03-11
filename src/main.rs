@@ -100,7 +100,7 @@ where
         let col = index % DB_DIM;
 
         let mut u = Matrix::<DB_DIM, 1>::zeros();
-        u.set_at(col, 1, self.delta());
+        u.set_at(col, 0, self.delta());
 
         let sk = Matrix::random(rng, LOGQ);
         let e = Matrix::<DB_DIM, 1>::gaussian_matrix(10, rng);
@@ -113,10 +113,25 @@ where
 
     /// Run the recovery process
     /// Takes in query state, hint_c, ans
-    // fn recover(query_state: &QueryState, ans: &Matrix) {}
+    fn recover(&self, query_state: &QueryState<N, DB_DIM>, ans: &Matrix<DB_DIM, 1>) -> u32 {
+        let row = self.hint_c.get_row(query_state.row);
+        let sk = query_state.sk.get_data();
+        let mut inner_product = 0u32;
+        for i in 0..N {
+            inner_product = inner_product.wrapping_add(row[i].wrapping_mul(sk[i]));
+        }
+        let tmp = ans.get_at(query_state.row, 0);
+        let tmp = tmp.wrapping_sub(inner_product);
+        self.scale_down(tmp) % (P as u32)
+    }
 
     pub fn delta(&self) -> u32 {
         (1 << LOGQ) / (P as u32)
+    }
+
+    pub fn scale_down(&self, value: u32) -> u32 {
+        let delta = self.delta();
+        (value + (delta / 2)) / delta
     }
 }
 

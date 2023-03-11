@@ -82,11 +82,21 @@ where
         self.data[row * C + col] = value;
     }
 
-    pub fn get_at(&mut self, row: usize, col: usize, value: u32) -> u32 {
+    pub fn get_at(&self, row: usize, col: usize) -> u32 {
         assert!(row < R);
         assert!(col < C);
 
         self.data[row * C + col]
+    }
+
+    pub fn get_row(&self, row: usize) -> &[u32] {
+        assert!(row < R);
+
+        self.data[(row * C)..((row * C) + C)].as_ref()
+    }
+
+    pub fn get_data(&self) -> &[u32] {
+        self.data.as_ref()
     }
 }
 
