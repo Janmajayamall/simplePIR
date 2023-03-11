@@ -8,108 +8,133 @@ use rand_chacha::ChaCha8Rng;
 mod matrix;
 mod utils;
 
-#[derive(Clone, Debug)]
-struct Params {
-    /// log of ciphertext modulus
-    logq: u32,
-    /// plaintext modulus
-    p: u32,
-    /// number of elements in Database
-    db_dim: usize,
-    db_dim_sqrt: usize,
-    /// n param of lwe
-    n: usize,
-    /// variance
-    variance: usize,
-}
-
-impl Params {
-    fn delta(&self) -> u32 {
-        (1 << self.logq) / self.p
-    }
-}
-
-struct Server {
+struct Server<const DB_DIM: usize, const N: usize, const LOGQ: usize>
+where
+    [(); DB_DIM * N]:,
+    [(); DB_DIM * DB_DIM]:,
+{
     // Seed for A
     hint_s: <ChaCha8Rng as SeedableRng>::Seed,
     // D * A
-    hint_c: Ma,
+    hint_c: Matrix<DB_DIM, N>,
     // D
-    db: Matrix,
-    // params
-    params: Params,
+    db: Matrix<DB_DIM, DB_DIM>,
 }
 
-impl Server {
+impl<const DB_DIM: usize, const N: usize, const LOGQ: usize> Server<DB_DIM, N, LOGQ>
+where
+    [(); DB_DIM * N]:,
+    [(); DB_DIM * DB_DIM]:,
+    [(); DB_DIM * 1]:,
+{
     // setup server for a given db
-    fn setup<R: RngCore + CryptoRng>(db: Matrix, params: &Params, rng: &mut R) -> Server {
+    fn setup<A: RngCore + CryptoRng>(
+        db: Matrix<DB_DIM, DB_DIM>,
+        rng: &mut A,
+    ) -> Server<DB_DIM, N, LOGQ> {
         let mut seed = <ChaCha8Rng as SeedableRng>::Seed::default();
         rng.fill(&mut seed);
 
-        let a = Matrix::random_2d_matrix(params.logq, rng, params.db_dim_sqrt, params.n);
-        let hint_c = db.dot(&a);
+        let a = Matrix::<DB_DIM, N>::random_from_seed(seed, LOGQ);
+        let hint_c = db.mul(&a);
 
         Server {
             hint_s: seed,
             hint_c,
             db,
-            params: params.clone(),
         }
     }
 
     // answer: takes in db and query and returns ans
-    fn answer(&self, query: &Matrix) -> Matrix {
-        self.db.dot(query)
+    fn answer(&self, query: &Matrix<DB_DIM, 1>) -> Matrix<DB_DIM, 1> {
+        self.db.mul(query)
     }
 }
 
-struct QueryState {
-    query: Matrix,
-    sk: Matrix,
+struct QueryState<const N: usize, const DB_DIM: usize>
+where
+    [(); DB_DIM * 1]:,
+    [(); N * 1]:,
+{
+    query: Matrix<DB_DIM, 1>,
+    sk: Matrix<N, 1>,
     row: usize,
 }
 
-struct Client {
-    params: Params,
+struct Client<const DB_DIM: usize, const N: usize, const LOGQ: usize, const P: usize>
+where
+    [(); DB_DIM * N]:,
+{
     hint_s: <ChaCha8Rng as SeedableRng>::Seed,
-    a: Matrix,
+    a: Matrix<DB_DIM, N>,
     // D * A
-    hint_c: Matrix,
+    hint_c: Matrix<DB_DIM, N>,
 }
 
-impl Client {
+impl<const DB_DIM: usize, const N: usize, const LOGQ: usize, const P: usize>
+    Client<DB_DIM, N, LOGQ, P>
+where
+    [(); DB_DIM * N]:,
+    [(); DB_DIM * DB_DIM]:,
+    [(); N * 1]:,
+    [(); DB_DIM * 1]:,
+{
     /// Takes in a server and returns a client.
     /// Note that client is stateful
-    fn new(server: &Server) -> Client {
-        let a =
-            Matrix::seeded_random_2d_matrix(server.params.logq, server.hint_s, server.params.n, 1);
+    pub fn new(server: &Server<DB_DIM, N, LOGQ>) -> Client<DB_DIM, N, LOGQ, P> {
+        let a = Matrix::random_from_seed(server.hint_s, LOGQ);
         Client {
-            params: server.params.clone(),
-            hint_s: server.hint_s.clone(),
+            hint_s: server.hint_s,
             a,
             hint_c: server.hint_c.clone(),
         }
     }
 
     /// Prepare a new query
-    fn query<R: CryptoRng + RngCore>(&self, rng: &mut R, index: usize) -> QueryState {
-        let row = index / self.params.db_dim_sqrt;
-        let col = index % self.params.db_dim_sqrt;
+    pub fn query<R: CryptoRng + RngCore>(
+        &self,
+        rng: &mut R,
+        index: usize,
+    ) -> QueryState<N, DB_DIM> {
+        let row = index / DB_DIM;
+        let col = index % DB_DIM;
 
-        let mut u = Matrix::zero(self.params.db_dim_sqrt, 1);
-        u.set(col, 1, self.params.delta());
+        let mut u = Matrix::<DB_DIM, 1>::zeros();
+        u.set_at(col, 1, self.delta());
 
-        let sk = Matrix::random_2d_matrix(self.params.logq, rng, self.params.n, 1);
-        let e = Matrix::sample_gaussian(10, rng, self.params.db_dim_sqrt, 1);
+        let sk = Matrix::random(rng, LOGQ);
+        let e = Matrix::<DB_DIM, 1>::gaussian_matrix(10, rng);
+
         // A * sk + e + (delta * u)
-        let query = self.a.dot(&sk).add(&e).add(&u);
+        let query = self.a.mul(&sk).add(&e).add(&u);
 
         QueryState { query, sk, row }
     }
 
     /// Run the recovery process
     /// Takes in query state, hint_c, ans
-    fn recover(query_state: &QueryState, ans: &Matrix) {}
+    // fn recover(query_state: &QueryState, ans: &Matrix) {}
+
+    pub fn delta(&self) -> u32 {
+        (1 << LOGQ) / (P as u32)
+    }
 }
 
-fn main() {}
+fn main() {
+    // log of ciphertext modulus
+    const LOGQ: u32 = 1;
+    const DELTA: u32 = (1 << LOGQ) / LOGP;
+
+    // plaintext modulus
+    const P: u32 = 890;
+    const LOGP: u32 = 10;
+
+    // Database params
+    const DIM_DB: usize = 100;
+    const DIM_DB_SQRT: usize = 10;
+
+    // n param of lwe
+    const N: usize = 10;
+    /// variance
+    const VARIANCE: usize = 10;
+}
