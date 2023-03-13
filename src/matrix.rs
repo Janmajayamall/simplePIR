@@ -102,6 +102,29 @@ where
     pub fn get_data(&self) -> &[u32] {
         self.data.as_ref()
     }
+
+    pub fn transpose(&self) -> Matrix<C, R>
+    where
+        [(); C * R]:,
+    {
+        let mut out = Matrix::zeros();
+        for i in 0..R {
+            for j in 0..C {
+                out.data[j * R + i] = self.data[i * C + j];
+            }
+        }
+        out
+    }
+
+    pub fn concat_row(&self, values: &[u32]) -> Matrix<{ R + 1 }, C>
+    where
+        [(); (R + 1) * C]:,
+    {
+        let mut out = Matrix::<{ R + 1 }, C>::zeros();
+        out.data[..(R * C)].copy_from_slice(self.data.as_slice());
+        out.data[(R * C)..].copy_from_slice(values);
+        out
+    }
 }
 
 #[cfg(test)]
@@ -116,6 +139,8 @@ mod tests {
         let a = Matrix::<10, 20>::random(&mut rng, 32);
         let b = Matrix::<20, 20>::random(&mut rng, 32);
         let c = a.mul(&b);
-        dbg!(c);
+        let c = Matrix::<5, 20>::random(&mut rng, 32);
+        let d = c.transpose();
+        dbg!(d);
     }
 }
