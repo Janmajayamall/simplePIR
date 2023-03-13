@@ -125,6 +125,27 @@ where
         out.data[(R * C)..].copy_from_slice(values);
         out
     }
+
+    pub fn expand<const DELTA: usize>(&self, modp: u32) -> Matrix<{ R * DELTA }, C>
+    where
+        [(); R * DELTA * C]:,
+    {
+        let mut out = Matrix::<{ R * DELTA }, C>::zeros();
+        for i in 0..R {
+            for j in 0..C {
+                let mut val = self.data[i * C + j];
+                for k in 0..DELTA {
+                    let v = val % modp;
+                    out.data[((i + k) * C) + j] = v;
+                }
+            }
+        }
+        out
+    }
+
+    pub fn shape(&self) {
+        println!("row: {}, col: {}", R, C);
+    }
 }
 
 #[cfg(test)]
@@ -139,8 +160,8 @@ mod tests {
         let a = Matrix::<10, 20>::random(&mut rng, 32);
         let b = Matrix::<20, 20>::random(&mut rng, 32);
         let c = a.mul(&b);
-        let c = Matrix::<5, 20>::random(&mut rng, 32);
-        let d = c.transpose();
-        dbg!(d);
+        let c = Matrix::<2, 20>::random(&mut rng, 32);
+        let d = c.expand::<4>(8);
+        dbg!(d.shape());
     }
 }

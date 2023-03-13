@@ -6,6 +6,7 @@ use rand::{distributions::Uniform, thread_rng, CryptoRng, Rng, RngCore, Seedable
 use rand_chacha::ChaCha8Rng;
 
 mod matrix;
+mod server;
 mod utils;
 
 struct Server<const DB_DIM: usize, const N: usize, const LOGQ: usize>
