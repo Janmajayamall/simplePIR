@@ -103,6 +103,10 @@ where
         self.data.as_ref()
     }
 
+    pub fn get_data_mut(&self) -> &mut [u32] {
+        self.data.as_mut_slice()
+    }
+
     pub fn transpose(&self) -> Matrix<C, R>
     where
         [(); C * R]:,
@@ -126,6 +130,17 @@ where
         out
     }
 
+    pub fn concat_matrix<const L: usize>(&self, other: &Matrix<L, C>) -> Matrix<{ R + L }, C>
+    where
+        [(); L * C]:,
+        [(); (R + L) * C]:,
+    {
+        let mut out = Matrix::<{ R + L }, C>::zeros();
+        out.data[..(R * C)].copy_from_slice(self.data.as_slice());
+        out.data[(R * C)..].copy_from_slice(other.get_data());
+        out
+    }
+
     pub fn expand<const DELTA: usize>(&self, modp: u32) -> Matrix<{ R * DELTA }, C>
     where
         [(); R * DELTA * C]:,
@@ -136,7 +151,23 @@ where
                 let mut val = self.data[i * C + j];
                 for k in 0..DELTA {
                     let v = val % modp;
-                    out.data[((i + k) * C) + j] = v;
+                    out.data[(((i * k) + k) * C) + j] = v;
+                }
+            }
+        }
+        out
+    }
+
+    pub fn recomp<const DELTA: usize>(&self, logp: usize) -> Matrix<{ R / DELTA }, C>
+    where
+        [(); R / DELTA * C]:,
+    {
+        let mut out = Matrix::<{ R / DELTA }, C>::zeros();
+        for i in 0..(R / DELTA) {
+            for j in 0..C {
+                let mut val = out.data.get_mut(i * C + j).unwrap();
+                for k in 0..DELTA {
+                    *val += self.data[(((i * k) + k) * C) + j] << (logp * k);
                 }
             }
         }
@@ -158,10 +189,8 @@ mod tests {
     fn new() {
         let mut rng = thread_rng();
         let a = Matrix::<10, 20>::random(&mut rng, 32);
-        let b = Matrix::<20, 20>::random(&mut rng, 32);
-        let c = a.mul(&b);
-        let c = Matrix::<2, 20>::random(&mut rng, 32);
-        let d = c.expand::<4>(8);
-        dbg!(d.shape());
+        let a_expanded = a.expand::<4>(256);
+
+        dbg!(a_expanded);
     }
 }
