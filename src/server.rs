@@ -129,6 +129,7 @@ where
     [(); N * DELTA * DB_DIM]:,
     [(); 1 * DELTA * N]:,
     [(); ((N * DELTA) + (1 * DELTA)) * 1]:,
+    [(); ((N * DELTA) + (1 * DELTA)) * N]:,
 {
     pub fn new(server: &Server<DB_DIM, N, LOGQ, DELTA, P>) -> Client<DB_DIM, N, LOGQ, DELTA, P> {
         let mut prng = <ChaCha8Rng as SeedableRng>::from_seed(server.hint_s);
@@ -197,14 +198,15 @@ where
         let d = tmp[N] - inner_product;
 
         self.scale_down(d)
+        // todo!();
     }
 
-    pub const fn delta(&self) -> u32 {
+    pub fn delta(&self) -> u32 {
         ((1 << LOGQ) as u64 / (P as u64)) as u32
     }
 
     pub fn scale_down(&self, value: u32) -> u32 {
-        let delta = self.delta();
+        let delta = self.delta;
         (value + (delta / 2)) / delta
     }
 }

@@ -103,7 +103,7 @@ where
         self.data.as_ref()
     }
 
-    pub fn get_data_mut(&self) -> &mut [u32] {
+    pub fn get_data_mut(&mut self) -> &mut [u32] {
         self.data.as_mut_slice()
     }
 
