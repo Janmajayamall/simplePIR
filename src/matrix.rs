@@ -147,12 +147,14 @@ impl<const R: usize, const C: usize, const L: usize> Matrix<R, C, L> {
         }
         let mut out = Matrix::<R1, C, L1>::zeros();
         let delta = R1 / R;
+
         for i in 0..R {
             for j in 0..C {
                 let mut val = self.data[i * C + j];
                 for k in 0..delta {
                     let v = val % modp;
-                    out.data[(((i * k) + k) * C) + j] = v;
+                    out.data[(((i * delta) + k) * C) + j] = v;
+                    val /= modp;
                 }
             }
         }
@@ -176,11 +178,37 @@ impl<const R: usize, const C: usize, const L: usize> Matrix<R, C, L> {
         }
         out
     }
-}
 
-impl<const R: usize, const C: usize, const L: usize> Matrix<R, C, L> {
-    pub fn fd<const C1: usize, const L1: usize>(f: Matrix<R, C1, L1>) {}
+    pub fn print(&self) {
+        println!();
+        for i in 0..R {
+            for j in 0..C {
+                print!("{},", self.data[i * C + j]);
+            }
+            println!();
+        }
+    }
 }
 
 #[cfg(test)]
-mod tests {}
+mod tests {
+    use std::thread;
+
+    use rand::thread_rng;
+
+    use super::*;
+
+    #[test]
+    fn test_expand() {
+        // let mut rng = thread_rng();
+        let seed: [u8; 32] = [0; 32];
+        let a1 = Matrix::<5, 5, 25>::random_from_seed(seed, 32);
+        // let a2 = Matrix::<5, 5, 25>::random_from_seed(seed, 32);
+
+        let c1 = a1.expand::<{ 5 * 4 }, { 5 * 5 * 4 }>(256);
+        let c2 = c1.recomp::<5, 25>(8);
+        // dbg!(a1.data);
+        // dbg!(c1.data);
+        assert_eq!(a1.data, c2.data);
+    }
+}
