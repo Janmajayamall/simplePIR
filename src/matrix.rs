@@ -3,39 +3,49 @@ use rand::{distributions::Uniform, CryptoRng, Rng, RngCore, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 
 #[derive(Clone, Debug)]
-pub struct Matrix<const R: usize, const C: usize>
-where
-    [(); R * C]:,
-{
-    data: [u32; R * C],
+pub struct Matrix<const R: usize, const C: usize, const L: usize> {
+    data: [u32; L],
 }
 
-impl<const R: usize, const C: usize> Matrix<R, C>
-where
-    [(); R * C]:,
-{
-    pub fn zeros() -> Matrix<R, C> {
-        Matrix { data: [0; R * C] }
+impl<const R: usize, const C: usize, const L: usize> Matrix<R, C, L> {
+    const MATCHES: () = assert!(L == R * C);
+
+    pub const fn zeros() -> Matrix<R, C, L> {
+        let _ = Self::MATCHES;
+        Matrix { data: [0; L] }
     }
 
-    pub fn from_data(data: [u32; R * C]) -> Matrix<R, C> {
+    pub fn from_data(data: [u32; L]) -> Matrix<R, C, L> {
+        let _ = Self::MATCHES;
         Matrix { data }
     }
 
-    pub fn random<A: CryptoRng + RngCore>(rng: &mut A, logp: usize) -> Matrix<R, C> {
+    pub fn random<A: CryptoRng + RngCore>(rng: &mut A, logp: usize) -> Matrix<R, C, L> {
+        let _ = Self::MATCHES;
+
         let last = ((1u64 << logp) - 1) as u32;
         let distr = Uniform::new_inclusive(0, last);
-        let mut out = Matrix::<R, C>::zeros();
+        let mut out = Matrix::<R, C, L>::zeros();
         out.data.iter_mut().for_each(|v| *v = rng.sample(distr));
         out
     }
 
-    pub fn random_from_seed(seed: <ChaCha8Rng as SeedableRng>::Seed, logp: usize) -> Matrix<R, C> {
+    pub fn random_from_seed(
+        seed: <ChaCha8Rng as SeedableRng>::Seed,
+        logp: usize,
+    ) -> Matrix<R, C, L> {
+        let _ = Self::MATCHES;
+
         let mut prng = ChaCha8Rng::from_seed(seed);
         Matrix::random(&mut prng, logp)
     }
 
-    pub fn gaussian_matrix<A: CryptoRng + RngCore>(variance: usize, rng: &mut A) -> Matrix<R, C> {
+    pub fn gaussian_matrix<A: CryptoRng + RngCore>(
+        variance: usize,
+        rng: &mut A,
+    ) -> Matrix<R, C, L> {
+        let _ = Self::MATCHES;
+
         let values = sample_vec_cbd(R * C, variance, rng)
             .expect("Sampling from gaussian distribution should work")
             .iter()
@@ -46,33 +56,32 @@ where
         out
     }
 
-    pub fn add(&self, rhs: &Matrix<R, C>) -> Matrix<R, C> {
-        let mut out = Matrix::<R, C>::zeros();
+    pub fn add(&self, rhs: &Matrix<R, C, L>) -> Matrix<R, C, L> {
+        let mut out = Matrix::<R, C, L>::zeros();
         for i in 0..self.data.len() {
             out.data[i] = self.data[i].wrapping_add(rhs.data[i]);
         }
         out
     }
 
-    pub fn sub(&self, rhs: &Matrix<R, C>) -> Matrix<R, C> {
-        let mut out = Matrix::<R, C>::zeros();
+    pub fn sub(&self, rhs: &Matrix<R, C, L>) -> Matrix<R, C, L> {
+        let mut out = Matrix::<R, C, L>::zeros();
         for i in 0..self.data.len() {
             out.data[i] = self.data[i].wrapping_sub(rhs.data[i]);
         }
         out
     }
 
-    pub fn mul<const L: usize>(&self, rhs: &Matrix<C, L>) -> Matrix<R, L>
-    where
-        [(); C * L]:,
-        [(); R * L]:,
-    {
-        let mut out = Matrix::<R, L>::zeros();
+    pub fn mul<const C1: usize, const L1: usize, const LR: usize>(
+        &self,
+        rhs: &Matrix<C, C1, L1>,
+    ) -> Matrix<R, C1, LR> {
+        let mut out = Matrix::<R, C1, LR>::zeros();
         for i in 0..R {
             for j in 0..C {
-                for k in 0..L {
-                    out.data[(i * L) + k] = out.data[(i * L) + k]
-                        .wrapping_add(self.data[(i * C) + j].wrapping_mul(rhs.data[(j * L) + k]));
+                for k in 0..C1 {
+                    out.data[(i * C1) + k] = out.data[(i * C1) + k]
+                        .wrapping_add(self.data[(i * C) + j].wrapping_mul(rhs.data[(j * C1) + k]));
                 }
             }
         }
@@ -107,10 +116,7 @@ where
         self.data.as_mut_slice()
     }
 
-    pub fn transpose(&self) -> Matrix<C, R>
-    where
-        [(); C * R]:,
-    {
+    pub fn transpose(&self) -> Matrix<C, R, L> {
         let mut out = Matrix::zeros();
         for i in 0..R {
             for j in 0..C {
@@ -120,36 +126,31 @@ where
         out
     }
 
-    pub fn concat_row(&self, values: &[u32]) -> Matrix<{ R + 1 }, C>
-    where
-        [(); (R + 1) * C]:,
-    {
-        let mut out = Matrix::<{ R + 1 }, C>::zeros();
-        out.data[..(R * C)].copy_from_slice(self.data.as_slice());
-        out.data[(R * C)..].copy_from_slice(values);
+    //TODO: somehow enforce `RR == R1 + R`
+    pub fn concat_matrix<const R1: usize, const L1: usize, const RR: usize, const LR: usize>(
+        &self,
+        other: &Matrix<R1, C, L1>,
+    ) -> Matrix<RR, C, LR> {
+        const {
+            assert!(RR == R1 + R);
+        }
+        let mut out = Matrix::<RR, C, LR>::zeros();
+        out.data[..L].copy_from_slice(self.data.as_slice());
+        out.data[L..].copy_from_slice(other.data.as_slice());
         out
     }
 
-    pub fn concat_matrix<const L: usize>(&self, other: &Matrix<L, C>) -> Matrix<{ R + L }, C>
-    where
-        [(); L * C]:,
-        [(); (R + L) * C]:,
-    {
-        let mut out = Matrix::<{ R + L }, C>::zeros();
-        out.data[..(R * C)].copy_from_slice(self.data.as_slice());
-        out.data[(R * C)..].copy_from_slice(other.get_data());
-        out
-    }
-
-    pub fn expand<const DELTA: usize>(&self, modp: u32) -> Matrix<{ R * DELTA }, C>
-    where
-        [(); R * DELTA * C]:,
-    {
-        let mut out = Matrix::<{ R * DELTA }, C>::zeros();
+    //TODO: enforce `R1 % R == 0`
+    pub fn expand<const R1: usize, const L1: usize>(&self, modp: u32) -> Matrix<R1, C, L1> {
+        const {
+            assert!(R1 % R == 0);
+        }
+        let mut out = Matrix::<R1, C, L1>::zeros();
+        let delta = R1 / R;
         for i in 0..R {
             for j in 0..C {
                 let mut val = self.data[i * C + j];
-                for k in 0..DELTA {
+                for k in 0..delta {
                     let v = val % modp;
                     out.data[(((i * k) + k) * C) + j] = v;
                 }
@@ -158,39 +159,28 @@ where
         out
     }
 
-    pub fn recomp<const DELTA: usize>(&self, logp: usize) -> Matrix<{ R / DELTA }, C>
-    where
-        [(); R / DELTA * C]:,
-    {
-        let mut out = Matrix::<{ R / DELTA }, C>::zeros();
-        for i in 0..(R / DELTA) {
+    //TODO: enforce `R % R1 == 0`
+    pub fn recomp<const R1: usize, const L1: usize>(&self, logp: usize) -> Matrix<R1, C, L1> {
+        const {
+            assert!(R % R1 == 0);
+        }
+        let mut out = Matrix::<R1, C, L1>::zeros();
+        let delta = R / R1;
+        for i in 0..R1 {
             for j in 0..C {
                 let mut val = out.data.get_mut(i * C + j).unwrap();
-                for k in 0..DELTA {
-                    *val += self.data[(((i * k) + k) * C) + j] << (logp * k);
+                for k in 0..delta {
+                    *val += self.data[(((i * delta) + k) * C) + j] << (logp * k);
                 }
             }
         }
         out
     }
+}
 
-    pub fn shape(&self) {
-        println!("row: {}, col: {}", R, C);
-    }
+impl<const R: usize, const C: usize, const L: usize> Matrix<R, C, L> {
+    pub fn fd<const C1: usize, const L1: usize>(f: Matrix<R, C1, L1>) {}
 }
 
 #[cfg(test)]
-mod tests {
-    use rand::thread_rng;
-
-    use super::*;
-
-    #[test]
-    fn new() {
-        let mut rng = thread_rng();
-        let a = Matrix::<10, 20>::random(&mut rng, 32);
-        let a_expanded = a.expand::<4>(256);
-
-        dbg!(a_expanded);
-    }
-}
+mod tests {}

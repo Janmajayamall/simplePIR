@@ -1,4 +1,4 @@
-#![feature(generic_const_exprs)]
+#![feature(inline_const)]
 use std::usize;
 
 use matrix::Matrix;
@@ -9,34 +9,41 @@ mod matrix;
 mod server;
 mod utils;
 
-struct Server<const DB_DIM: usize, const N: usize, const LOGQ: usize>
-where
-    [(); DB_DIM * N]:,
-    [(); DB_DIM * DB_DIM]:,
-{
+struct Server<
+    const DB_R: usize,
+    const DB_C: usize,
+    const DB_RC: usize,
+    const N: usize,
+    const DB_RN: usize,
+    const DB_CN: usize,
+> {
     // Seed for A
     hint_s: <ChaCha8Rng as SeedableRng>::Seed,
     // D * A
-    hint_c: Matrix<DB_DIM, N>,
+    hint_c: Matrix<DB_R, N, DB_RN>,
     // D
-    db: Matrix<DB_DIM, DB_DIM>,
+    db: Matrix<DB_R, DB_C, DB_RC>,
 }
 
-impl<const DB_DIM: usize, const N: usize, const LOGQ: usize> Server<DB_DIM, N, LOGQ>
-where
-    [(); DB_DIM * N]:,
-    [(); DB_DIM * DB_DIM]:,
-    [(); DB_DIM * 1]:,
+impl<
+        const DB_R: usize,
+        const DB_C: usize,
+        const DB_RC: usize,
+        const N: usize,
+        const DB_RN: usize,
+        const DB_CN: usize,
+    > Server<DB_R, DB_C, DB_RC, N, DB_RN, DB_CN>
 {
     // setup server for a given db
     fn setup<A: RngCore + CryptoRng>(
-        db: Matrix<DB_DIM, DB_DIM>,
+        db: Matrix<DB_R, DB_C, DB_RC>,
         rng: &mut A,
-    ) -> Server<DB_DIM, N, LOGQ> {
+    ) -> Server<DB_R, DB_C, DB_RC, N, DB_RN, DB_CN> {
         let mut seed = <ChaCha8Rng as SeedableRng>::Seed::default();
         rng.fill(&mut seed);
 
-        let a = Matrix::<DB_DIM, N>::random_from_seed(seed, LOGQ);
+        //TODO: LogQ
+        let a = Matrix::<DB_C, N, DB_CN>::random_from_seed(seed, 32);
         let hint_c = db.mul(&a);
 
         Server {
@@ -47,43 +54,47 @@ where
     }
 
     // answer: takes in db and query and returns ans
-    fn answer(&self, query: &Matrix<DB_DIM, 1>) -> Matrix<DB_DIM, 1> {
+    fn answer(&self, query: &Matrix<DB_C, 1, DB_C>) -> Matrix<DB_R, 1, DB_R> {
         self.db.mul(query)
     }
 }
 
-struct QueryState<const N: usize, const DB_DIM: usize>
-where
-    [(); DB_DIM * 1]:,
-    [(); N * 1]:,
-{
-    query: Matrix<DB_DIM, 1>,
-    sk: Matrix<N, 1>,
+struct QueryState<const N: usize, const DB_C: usize> {
+    query: Matrix<DB_C, 1, DB_C>,
+    sk: Matrix<N, 1, N>,
     row: usize,
 }
 
-struct Client<const DB_DIM: usize, const N: usize, const LOGQ: usize, const P: usize>
-where
-    [(); DB_DIM * N]:,
-{
+struct Client<
+    const DB_R: usize,
+    const DB_C: usize,
+    const N: usize,
+    const DB_RC: usize,
+    const DB_RN: usize,
+    const DB_CN: usize,
+> {
     hint_s: <ChaCha8Rng as SeedableRng>::Seed,
-    a: Matrix<DB_DIM, N>,
-    // D * A
-    hint_c: Matrix<DB_DIM, N>,
+    a: Matrix<DB_C, N, DB_CN>,
+    /// D * A
+    hint_c: Matrix<DB_R, N, DB_RN>,
 }
 
-impl<const DB_DIM: usize, const N: usize, const LOGQ: usize, const P: usize>
-    Client<DB_DIM, N, LOGQ, P>
-where
-    [(); DB_DIM * N]:,
-    [(); DB_DIM * DB_DIM]:,
-    [(); N * 1]:,
-    [(); DB_DIM * 1]:,
+impl<
+        const DB_R: usize,
+        const DB_C: usize,
+        const N: usize,
+        const DB_RC: usize,
+        const DB_RN: usize,
+        const DB_CN: usize,
+    > Client<DB_R, DB_C, N, DB_RC, DB_RN, DB_CN>
 {
     /// Takes in a server and returns a client.
     /// Note that client is stateful
-    pub fn new(server: &Server<DB_DIM, N, LOGQ>) -> Client<DB_DIM, N, LOGQ, P> {
-        let a = Matrix::random_from_seed(server.hint_s, LOGQ);
+    pub fn new(
+        server: &Server<DB_R, DB_C, DB_RC, N, DB_RN, DB_CN>,
+    ) -> Client<DB_R, DB_C, N, DB_RC, DB_RN, DB_CN> {
+        //TODO: logq
+        let a = Matrix::random_from_seed(server.hint_s, 32);
         Client {
             hint_s: server.hint_s,
             a,
@@ -92,19 +103,16 @@ where
     }
 
     /// Prepare a new query
-    pub fn query<R: CryptoRng + RngCore>(
-        &self,
-        rng: &mut R,
-        index: usize,
-    ) -> QueryState<N, DB_DIM> {
-        let row = index / DB_DIM;
-        let col = index % DB_DIM;
+    pub fn query<R: CryptoRng + RngCore>(&self, rng: &mut R, index: usize) -> QueryState<N, DB_C> {
+        let row = index / DB_C;
+        let col = index % DB_C;
 
-        let mut u = Matrix::<DB_DIM, 1>::zeros();
+        let mut u = Matrix::<DB_C, 1, DB_C>::zeros();
         u.set_at(col, 0, self.delta());
 
-        let sk = Matrix::random(rng, LOGQ);
-        let e = Matrix::<DB_DIM, 1>::gaussian_matrix(10, rng);
+        //TODO: logq
+        let sk = Matrix::random(rng, 32);
+        let e = Matrix::<DB_C, 1, DB_C>::gaussian_matrix(10, rng);
 
         // A * sk + e + (delta * u)
         let query = self.a.mul(&sk).add(&e).add(&u);
@@ -114,7 +122,7 @@ where
 
     /// Run the recovery process
     /// Takes in query state, hint_c, ans
-    fn recover(&self, query_state: &QueryState<N, DB_DIM>, ans: &Matrix<DB_DIM, 1>) -> u32 {
+    fn recover(&self, query_state: &QueryState<N, DB_C>, ans: &Matrix<DB_R, 1, DB_R>) -> u32 {
         let row = self.hint_c.get_row(query_state.row);
         let sk = query_state.sk.get_data();
         let mut inner_product = 0u32;
@@ -123,14 +131,17 @@ where
         }
         let tmp = ans.get_at(query_state.row, 0);
         let tmp = tmp.wrapping_sub(inner_product);
-        self.scale_down(tmp) % (P as u32)
+
+        //TODO: place P
+        self.scale_down(tmp) % (256 as u32)
     }
 
-    pub fn delta(&self) -> u32 {
-        ((1u64 << LOGQ) / (P as u64)) as u32
+    pub const fn delta(&self) -> u32 {
+        //TODO: logq and p
+        ((1u64 << 32) / (256 as u64)) as u32
     }
 
-    pub fn scale_down(&self, value: u32) -> u32 {
+    pub const fn scale_down(&self, value: u32) -> u32 {
         let delta = self.delta();
         (value + (delta / 2)) / delta
     }
@@ -145,7 +156,11 @@ fn main() {
 
     // Database params
     const ENTRIES: usize = 1 << 18;
-    const DIM_DB: usize = 1 << 9;
+    const DB_C: usize = 1 << 9;
+    const DB_R: usize = 1 << 9;
+    const DB_RC: usize = DB_C * DB_R;
+    const DB_RN: usize = DB_R * N;
+    const DB_CN: usize = DB_C * N;
 
     // n param of lwe
     const N: usize = 10;
@@ -154,12 +169,12 @@ fn main() {
 
     let mut rng = thread_rng();
     let mut entries = [0u32; ENTRIES];
-    let distr = Uniform::new(0, 276u32);
+    let distr = Uniform::new(0, 256u32);
     entries.iter_mut().for_each(|v| *v = rng.sample(distr));
-    let db = Matrix::<DIM_DB, DIM_DB>::from_data(entries);
+    let db = Matrix::<DB_R, DB_C, DB_RC>::from_data(entries);
 
-    let server = Server::<DIM_DB, N, LOGQ>::setup(db, &mut rng);
-    let client = Client::<DIM_DB, N, LOGQ, P>::new(&server);
+    let server = Server::<DB_R, DB_C, DB_RC, N, DB_RN, DB_CN>::setup(db, &mut rng);
+    let client = Client::<DB_R, DB_C, N, DB_RC, DB_RN, DB_CN>::new(&server);
 
     for i in 0..1000 {
         let index = rng.sample(Uniform::new(0, ENTRIES));
