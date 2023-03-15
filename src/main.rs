@@ -16,6 +16,7 @@ struct Server<
     const N: usize,
     const DB_RN: usize,
     const DB_CN: usize,
+    const LOGQ: usize,
 > {
     // Seed for A
     hint_s: <ChaCha8Rng as SeedableRng>::Seed,
@@ -32,18 +33,18 @@ impl<
         const N: usize,
         const DB_RN: usize,
         const DB_CN: usize,
-    > Server<DB_R, DB_C, DB_RC, N, DB_RN, DB_CN>
+        const LOGQ: usize,
+    > Server<DB_R, DB_C, DB_RC, N, DB_RN, DB_CN, LOGQ>
 {
     // setup server for a given db
     fn setup<A: RngCore + CryptoRng>(
         db: Matrix<DB_R, DB_C, DB_RC>,
         rng: &mut A,
-    ) -> Server<DB_R, DB_C, DB_RC, N, DB_RN, DB_CN> {
+    ) -> Server<DB_R, DB_C, DB_RC, N, DB_RN, DB_CN, LOGQ> {
         let mut seed = <ChaCha8Rng as SeedableRng>::Seed::default();
         rng.fill(&mut seed);
 
-        //TODO: LogQ
-        let a = Matrix::<DB_C, N, DB_CN>::random_from_seed(seed, 32);
+        let a = Matrix::<DB_C, N, DB_CN>::random_from_seed(seed, LOGQ);
         let hint_c = db.mul(&a);
 
         Server {
@@ -72,6 +73,8 @@ struct Client<
     const DB_RC: usize,
     const DB_RN: usize,
     const DB_CN: usize,
+    const LOGQ: usize,
+    const P: usize,
 > {
     hint_s: <ChaCha8Rng as SeedableRng>::Seed,
     a: Matrix<DB_C, N, DB_CN>,
@@ -86,15 +89,16 @@ impl<
         const DB_RC: usize,
         const DB_RN: usize,
         const DB_CN: usize,
-    > Client<DB_R, DB_C, N, DB_RC, DB_RN, DB_CN>
+        const LOGQ: usize,
+        const P: usize,
+    > Client<DB_R, DB_C, N, DB_RC, DB_RN, DB_CN, LOGQ, P>
 {
     /// Takes in a server and returns a client.
     /// Note that client is stateful
     pub fn new(
-        server: &Server<DB_R, DB_C, DB_RC, N, DB_RN, DB_CN>,
-    ) -> Client<DB_R, DB_C, N, DB_RC, DB_RN, DB_CN> {
-        //TODO: logq
-        let a = Matrix::random_from_seed(server.hint_s, 32);
+        server: &Server<DB_R, DB_C, DB_RC, N, DB_RN, DB_CN, LOGQ>,
+    ) -> Client<DB_R, DB_C, N, DB_RC, DB_RN, DB_CN, LOGQ, P> {
+        let a = Matrix::random_from_seed(server.hint_s, LOGQ);
         Client {
             hint_s: server.hint_s,
             a,
@@ -108,10 +112,9 @@ impl<
         let col = index % DB_C;
 
         let mut u = Matrix::<DB_C, 1, DB_C>::zeros();
-        u.set_at(col, 0, self.delta());
+        u.set_at(col, 0, Self::delta());
 
-        //TODO: logq
-        let sk = Matrix::random(rng, 32);
+        let sk = Matrix::random(rng, LOGQ);
         let e = Matrix::<DB_C, 1, DB_C>::gaussian_matrix(10, rng);
 
         // A * sk + e + (delta * u)
@@ -132,17 +135,15 @@ impl<
         let tmp = ans.get_at(query_state.row, 0);
         let tmp = tmp.wrapping_sub(inner_product);
 
-        //TODO: place P
-        self.scale_down(tmp) % (256 as u32)
+        self.scale_down(tmp) % (P as u32)
     }
 
-    pub const fn delta(&self) -> u32 {
-        //TODO: logq and p
-        ((1u64 << 32) / (256 as u64)) as u32
+    pub const fn delta() -> u32 {
+        ((1u64 << LOGQ) / (P as u64)) as u32
     }
 
     pub const fn scale_down(&self, value: u32) -> u32 {
-        let delta = self.delta();
+        let delta = Self::delta();
         (value + (delta / 2)) / delta
     }
 }
@@ -173,8 +174,8 @@ fn main() {
     entries.iter_mut().for_each(|v| *v = rng.sample(distr));
     let db = Matrix::<DB_R, DB_C, DB_RC>::from_data(entries);
 
-    let server = Server::<DB_R, DB_C, DB_RC, N, DB_RN, DB_CN>::setup(db, &mut rng);
-    let client = Client::<DB_R, DB_C, N, DB_RC, DB_RN, DB_CN>::new(&server);
+    let server = Server::<DB_R, DB_C, DB_RC, N, DB_RN, DB_CN, LOGQ>::setup(db, &mut rng);
+    let client = Client::<DB_R, DB_C, N, DB_RC, DB_RN, DB_CN, LOGQ, P>::new(&server);
 
     for i in 0..1000 {
         let index = rng.sample(Uniform::new(0, ENTRIES));
