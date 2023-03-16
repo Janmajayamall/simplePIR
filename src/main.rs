@@ -1,12 +1,14 @@
 #![feature(inline_const)]
+#![feature(inherent_associated_types)]
 use std::usize;
 
+use crate::double_pir::{Client as DoubleClient, Server as DoubleServer};
 use matrix::Matrix;
 use rand::{distributions::Uniform, thread_rng, CryptoRng, Rng, RngCore, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 
+mod double_pir;
 mod matrix;
-mod server;
 mod utils;
 
 struct Server<
@@ -146,6 +148,33 @@ impl<
         let delta = Self::delta();
         (value + (delta / 2)) / delta
     }
+}
+
+fn double_pir() {
+    // log of ciphertext modulus
+    const LOGQ: usize = 32;
+
+    // plaintext modulus
+    const P: usize = 276;
+
+    // Database params
+    const ENTRIES: usize = 1 << 18;
+    const DB_C: usize = 1 << 9;
+    const DB_R: usize = 1 << 9;
+    const DB_RC: usize = DB_C * DB_R;
+    const DB_RN: usize = DB_R * N;
+    const DB_CN: usize = DB_C * N;
+
+    // n param of lwe
+    const N: usize = 10;
+    /// variance
+    const VARIANCE: usize = 10;
+
+    let mut rng = thread_rng();
+    let mut entries = [0u32; ENTRIES];
+    let distr = Uniform::new(0, 256u32);
+    entries.iter_mut().for_each(|v| *v = rng.sample(distr));
+    let db = Matrix::<DB_R, DB_C, DB_RC>::from_data(entries);
 }
 
 fn main() {
