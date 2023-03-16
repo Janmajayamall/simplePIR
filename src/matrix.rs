@@ -126,7 +126,6 @@ impl<const R: usize, const C: usize, const L: usize> Matrix<R, C, L> {
         out
     }
 
-    //TODO: somehow enforce `RR == R1 + R`
     pub fn concat_matrix<const R1: usize, const L1: usize, const RR: usize, const LR: usize>(
         &self,
         other: &Matrix<R1, C, L1>,
@@ -140,9 +139,9 @@ impl<const R: usize, const C: usize, const L: usize> Matrix<R, C, L> {
         out
     }
 
-    //TODO: enforce `R1 % R == 0`
     pub fn expand<const R1: usize, const L1: usize>(&self, modp: u32) -> Matrix<R1, C, L1> {
         const {
+            //TODO: enforce that `R1 / R` should `logQ` / `logP`
             assert!(R1 % R == 0);
         }
         let mut out = Matrix::<R1, C, L1>::zeros();
@@ -210,5 +209,13 @@ mod tests {
         // dbg!(a1.data);
         // dbg!(c1.data);
         assert_eq!(a1.data, c2.data);
+    }
+
+    #[test]
+    fn test() {
+        // let mut rng = thread_rng();
+        let seed: [u8; 32] = [0; 32];
+        let a1 = Matrix::<1024, 1, 1024>::random_from_seed(seed, 32);
+        dbg!(a1.print());
     }
 }
