@@ -9,6 +9,7 @@ use rand_chacha::ChaCha8Rng;
 
 mod double_pir;
 mod matrix;
+mod matrix2;
 mod utils;
 
 struct Server<
