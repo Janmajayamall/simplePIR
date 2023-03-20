@@ -342,6 +342,32 @@ impl Matrix {
         todo!()
     }
 
+    pub fn transpose_and_expand_and_concat_cols_and_squish(
+        &self,
+        modp: u32,
+        delta: usize,
+        concat: usize,
+        basis: usize,
+        d: usize,
+    ) -> Matrix {
+        let mut out = Matrix::zeros(self.cols * concat * delta, (self.rows / concat + d - 1) / d);
+        let o: &mut [u32] = &mut out.data;
+        for j in 0..self.rows {
+            for i in 0..self.cols {
+                let mut val = self.data[i + self.cols * j];
+                for k in 0..delta {
+                    let v = val % modp;
+                    let r = i * delta + k + self.cols * delta * (j % concat);
+                    let c = j / concat;
+                    o[r * out.cols + c / d] = v << (basis * (c % d));
+                    val /= modp;
+                }
+            }
+        }
+
+        out
+    }
+
     pub fn transpose(&self) -> Matrix {
         todo!()
     }
@@ -390,5 +416,12 @@ mod tests {
         let a_squished = a.squish(10, 3);
         let mut b = Matrix::random(1024, 1024, 32, &mut rng);
         let c2 = a_squished.matrix_mul_transposed_packed(&b, 10, 3);
+    }
+
+    #[test]
+    fn transpose_and_expand_and_concat_cols_and_squish() {
+        let mut rng = thread_rng();
+        let a = Matrix::random(1024, 1024, 8, &mut rng);
+        a.transpose_and_expand_and_concat_cols_and_squish(256, 4, 3, 10, 3);
     }
 }
