@@ -84,7 +84,7 @@ impl Matrix {
         out
     }
 
-    fn unquish(&self, basis: usize, delta: usize, cols: usize) -> Matrix {
+    fn unsquish(&self, basis: usize, delta: usize, cols: usize) -> Matrix {
         assert!(delta * basis <= 32);
 
         let mut out = Matrix::zeros(self.rows, cols);
@@ -182,7 +182,7 @@ impl Matrix {
             let mut index2 = 0;
             for j in (0..self.cols) {
                 db = a[index];
-                db2 = a[index + 1 * self.cols];
+                db2 = a[index + self.cols];
                 db3 = a[index + 2 * self.cols];
                 db4 = a[index + 3 * self.cols];
                 db5 = a[index + 4 * self.cols];
@@ -260,6 +260,92 @@ impl Matrix {
         out
     }
 
+    pub fn matrix_mul_transposed_packed(&self, rhs: &Matrix, basis: usize, delta: usize) -> Matrix {
+        assert_eq!(basis, 10);
+        assert_eq!(delta, 3);
+
+        let mut out = Matrix::zeros(self.rows, rhs.rows);
+
+        let o: &mut [u32] = &mut out.data;
+        let a: &[u32] = self.data.as_ref();
+        let b: &[u32] = rhs.data.as_ref();
+
+        let mut index1 = 0;
+        if self.rows > self.cols {
+            for i in 0..self.rows {
+                for k in 0..self.cols {
+                    let db = a[index1];
+                    let val = db & MASK;
+                    let val2 = (db >> BASIS) & MASK;
+                    let val3 = (db >> BASIS2) & MASK;
+                    for j in 0..rhs.rows {
+                        o[i * rhs.rows + j] = o[i * rhs.rows + j]
+                            .wrapping_add(val.wrapping_mul(b[k * COMPRESSION + rhs.cols * j]));
+                        o[i * rhs.rows + j] = o[i * rhs.rows + j]
+                            .wrapping_add(val2.wrapping_mul(b[k * COMPRESSION + rhs.cols * j + 1]));
+                        o[i * rhs.rows + j] = o[i * rhs.rows + j]
+                            .wrapping_add(val3.wrapping_mul(b[k * COMPRESSION + rhs.cols * j + 2]));
+                    }
+                    index1 += 1;
+                }
+            }
+        } else {
+            let (mut tmp, mut tmp2, mut tmp3, mut tmp4, mut tmp5, mut tmp6, mut tmp7, mut tmp8);
+            for j in 0..rhs.rows {
+                let mut index1 = 0;
+                for i in 0..self.rows {
+                    let mut index2 = 0;
+                    tmp = 0u32;
+                    tmp2 = 0u32;
+                    tmp3 = 0u32;
+                    tmp4 = 0u32;
+                    tmp5 = 0u32;
+                    tmp6 = 0u32;
+                    tmp7 = 0u32;
+                    tmp8 = 0u32;
+                    for k in 0..self.cols {
+                        let db = a[index1];
+                        for m in 0..COMPRESSION {
+                            let val = (db >> (m * BASIS)) & MASK;
+                            tmp = tmp.wrapping_add(val.wrapping_mul(b[index2 + j * rhs.cols]));
+                            tmp2 =
+                                tmp2.wrapping_add(val.wrapping_mul(b[index2 + (j + 1) * rhs.cols]));
+                            tmp3 =
+                                tmp3.wrapping_add(val.wrapping_mul(b[index2 + (j + 2) * rhs.cols]));
+                            tmp4 =
+                                tmp4.wrapping_add(val.wrapping_mul(b[index2 + (j + 3) * rhs.cols]));
+                            tmp5 =
+                                tmp5.wrapping_add(val.wrapping_mul(b[index2 + (j + 4) * rhs.cols]));
+                            tmp6 =
+                                tmp6.wrapping_add(val.wrapping_mul(b[index2 + (j + 5) * rhs.cols]));
+                            tmp7 =
+                                tmp7.wrapping_add(val.wrapping_mul(b[index2 + (j + 6) * rhs.cols]));
+                            tmp8 =
+                                tmp8.wrapping_add(val.wrapping_mul(b[index2 + (j + 7) * rhs.cols]));
+
+                            index2 += 1;
+                        }
+                        index1 += 1;
+                    }
+                    o[rhs.rows * i + j] = tmp;
+                    o[rhs.rows * i + j + 1] = tmp2;
+                    o[rhs.rows * i + j + 2] = tmp3;
+                    o[rhs.rows * i + j + 3] = tmp4;
+                    o[rhs.rows * i + j + 4] = tmp5;
+                    o[rhs.rows * i + j + 5] = tmp6;
+                    o[rhs.rows * i + j + 6] = tmp7;
+                    o[rhs.rows * i + j + 7] = tmp8;
+                }
+            }
+        }
+
+        todo!()
+    }
+
+    pub fn transpose(&self) -> Matrix {
+        todo!()
+    }
+
     fn print_dims(&self) {
         println!("{} x {}: {}", self.rows, self.cols, self.data.len());
     }
@@ -276,12 +362,12 @@ mod tests {
         let mut rng = thread_rng();
         let a = Matrix::random(1024, 1024, 8, &mut rng);
         let a_squished = a.squish(10, 3);
-        let a_back = a_squished.unquish(10, 3, 1024);
+        let a_back = a_squished.unsquish(10, 3, 1024);
         assert_eq!(a, a_back);
     }
 
     #[test]
-    fn test1() {
+    fn test_matrix_mul_vec_packed() {
         let mut rng = thread_rng();
         let a = Matrix::random(1024, 1024, 8, &mut rng);
         let mut b = Matrix::random(1024, 1, 32, &mut rng);
@@ -294,5 +380,15 @@ mod tests {
         let c2 = a_squished.matrix_mul_vec_packed(&b, 10, 3);
 
         assert_eq!(c, c2);
+    }
+
+    #[test]
+    fn test_matrix_mul_transposed() {
+        let mut rng = thread_rng();
+        let a = Matrix::random(1024, 1024, 8, &mut rng);
+
+        let a_squished = a.squish(10, 3);
+        let mut b = Matrix::random(1024, 1024, 32, &mut rng);
+        let c2 = a_squished.matrix_mul_transposed_packed(&b, 10, 3);
     }
 }
