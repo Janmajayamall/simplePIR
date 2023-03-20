@@ -2,11 +2,13 @@
 #![feature(inherent_associated_types)]
 use std::usize;
 
-use crate::double_pir::{Client as DoubleClient, Server as DoubleServer};
+use crate::database::Database;
+use crate::double_pir::DoublePir;
 use matrix::Matrix;
 use rand::{distributions::Uniform, thread_rng, CryptoRng, Rng, RngCore, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 
+mod database;
 mod double_pir;
 mod matrix;
 mod matrix2;
@@ -193,73 +195,11 @@ fn simple_pir() {
     }
 }
 
-fn double_pir() {
-    // log of ciphertext modulus
-    const LOGQ: usize = 32;
-
-    // plaintext modulus
-    const P: u32 = 256;
-
-    // Database params
-    const ENTRIES: usize = 1 << 18;
-    const DB_C: usize = 1 << 9;
-    const DB_R: usize = 1 << 9;
-    const DB_RC: usize = DB_C * DB_R;
-    const DB_RN: usize = DB_R * N;
-    const DB_CN: usize = DB_C * N;
-    const DELTA: usize = 4;
-    const NBD: usize = N * DELTA;
-    const NBD_N: usize = NBD * N;
-    const NBD_DBR: usize = NBD * DB_R;
-    const DNPD: usize = NBD + DELTA;
-    const DR: usize = DELTA * DB_R;
-    const DNPD_R: usize = DNPD * DB_R;
-    const DNPD_N: usize = DNPD * N;
-    const NP1: usize = N + 1;
-
-    // n param of lwe
-    const N: usize = 10;
-    /// variance
-    const VARIANCE: usize = 10;
-
-    let mut rng = thread_rng();
-    let mut entries = [0u32; ENTRIES];
-    let distr = Uniform::new(0, 256u32);
-    entries.iter_mut().for_each(|v| *v = rng.sample(distr));
-
-    let db = Matrix::<DB_R, DB_C, DB_RC>::from_data(entries);
-
-    let mut rng = thread_rng();
-    let server = DoubleServer::<
-        DB_R,
-        DB_C,
-        N,
-        DELTA,
-        NBD,
-        DB_RC,
-        NBD_N,
-        NBD_DBR,
-        DB_RN,
-        DB_CN,
-        LOGQ,
-        P,
-    >::setup(&db, &mut rng);
-    let client = DoubleClient::new(&server);
-
-    for _ in 0..1000 {
-        let index = rng.sample(Uniform::new(0, ENTRIES));
-        let query_state = client.query(&mut rng, index);
-        let mut now = std::time::Instant::now();
-        let ans = server.ans::<DNPD, DR, DNPD_R>(&query_state.query.0, &query_state.query.1);
-        println!("Server response time: {:?}", now.elapsed());
-        now = std::time::Instant::now();
-        let value = client.recover::<NP1, DNPD, DNPD_N>(&query_state, ans);
-        println!("Client recover time: {:?}", now.elapsed());
-        assert_eq!(value, entries[index]);
-    }
-}
-
 fn main() {
-    double_pir();
-    // simple_pir();
+    let n_entries = 1 << 28;
+    let row_length = 8;
+    let n = 1 << 10;
+    let logq = 32;
+    let params = DoublePir::pick_params(n_entries, row_length, n, logq);
+    Database::random(n_entries, row_length, &params);
 }

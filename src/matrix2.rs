@@ -14,14 +14,14 @@ const MASK: u32 = (1 << BASIS) - 1;
 /// 7. MatrixMulVec
 /// 8. MatrixMulVecPacked
 #[derive(PartialEq, Debug)]
-struct Matrix {
+pub struct Matrix {
     rows: usize,
     cols: usize,
     data: Vec<u32>,
 }
 
 impl Matrix {
-    fn zeros(rows: usize, cols: usize) -> Matrix {
+    pub fn zeros(rows: usize, cols: usize) -> Matrix {
         Matrix {
             rows,
             cols,
@@ -29,7 +29,7 @@ impl Matrix {
         }
     }
 
-    fn random<R: RngCore + CryptoRng>(
+    pub fn random<R: RngCore + CryptoRng>(
         rows: usize,
         cols: usize,
         modp: usize,
@@ -44,7 +44,7 @@ impl Matrix {
         out
     }
 
-    fn gaussian<R: RngCore + CryptoRng>(
+    pub fn gaussian<R: RngCore + CryptoRng>(
         rows: usize,
         cols: usize,
         variance: usize,
@@ -422,6 +422,7 @@ mod tests {
     fn transpose_and_expand_and_concat_cols_and_squish() {
         let mut rng = thread_rng();
         let a = Matrix::random(1024, 1024, 8, &mut rng);
-        a.transpose_and_expand_and_concat_cols_and_squish(256, 4, 3, 10, 3);
+        let a2 = a.transpose_and_expand_and_concat_cols_and_squish(256, 4, 3, 10, 3);
+        a2.print_dims();
     }
 }
