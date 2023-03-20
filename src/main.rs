@@ -201,5 +201,5 @@ fn main() {
     let n = 1 << 10;
     let logq = 32;
     let params = DoublePir::pick_params(n_entries, row_length, n, logq);
-    Database::random(n_entries, row_length, &params);
+    let db = Database::random(n_entries, row_length, &params);
 }

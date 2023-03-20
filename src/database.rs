@@ -52,8 +52,8 @@ impl DatabaseInfo {
 }
 
 pub struct Database {
-    db_info: DatabaseInfo,
-    data: Matrix,
+    pub db_info: DatabaseInfo,
+    pub data: Matrix,
 }
 
 impl Database {
@@ -136,19 +136,23 @@ impl Database {
             (no_of_p * n_entries, no_of_p, 0)
         }
     }
+
+    pub fn squish(&mut self, basis: usize, delta: usize) {
+        self.data = self.data.squish(basis, delta);
+    }
 }
 
 pub struct Params {
     /// LWE secret dimension
-    n: u32,
+    pub n: usize,
     /// LWE standard deviation
-    sigma: f64,
+    pub sigma: f64,
     /// DB height
-    l: usize,
+    pub l: usize,
     /// DB width
-    m: usize,
+    pub m: usize,
     /// Log of ciphertext modulus
-    logq: usize,
+    pub logq: usize,
     /// plaintext modulus
     pub p: u32,
 }
@@ -156,5 +160,9 @@ pub struct Params {
 impl Params {
     pub fn pick_params(l: usize, m: usize) -> Params {
         todo!()
+    }
+
+    pub fn delta(&self) -> usize {
+        (self.logq as f64 / (self.p as f64).log2()).ceil() as usize
     }
 }

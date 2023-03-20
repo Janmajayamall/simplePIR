@@ -15,9 +15,9 @@ const MASK: u32 = (1 << BASIS) - 1;
 /// 8. MatrixMulVecPacked
 #[derive(PartialEq, Debug)]
 pub struct Matrix {
-    rows: usize,
-    cols: usize,
-    data: Vec<u32>,
+    pub rows: usize,
+    pub cols: usize,
+    pub data: Vec<u32>,
 }
 
 impl Matrix {
@@ -60,7 +60,7 @@ impl Matrix {
         out
     }
 
-    fn squish(&self, basis: usize, delta: usize) -> Matrix {
+    pub fn squish(&self, basis: usize, delta: usize) -> Matrix {
         // validate squish params
         assert!(delta * basis <= 32);
         assert!(delta == 3);
@@ -84,7 +84,7 @@ impl Matrix {
         out
     }
 
-    fn unsquish(&self, basis: usize, delta: usize, cols: usize) -> Matrix {
+    pub fn unsquish(&self, basis: usize, delta: usize, cols: usize) -> Matrix {
         assert!(delta * basis <= 32);
 
         let mut out = Matrix::zeros(self.rows, cols);
@@ -102,6 +102,12 @@ impl Matrix {
         }
 
         out
+    }
+
+    pub fn concat_matrix(&mut self, other: &Matrix) {
+        assert!(self.cols == other.cols);
+        self.data.extend_from_slice(&other.data);
+        self.rows += other.rows;
     }
 
     fn concat_rows(&mut self, rows: &[u32]) {
@@ -136,6 +142,21 @@ impl Matrix {
         izip!(out.data.iter_mut(), self.data.iter(), rhs.data.iter()).for_each(|(o, l, r)| {
             *o = *l - *r;
         });
+        out
+    }
+
+    pub fn mul(&self, rhs: &Matrix) -> Matrix {
+        assert_eq!(self.cols, rhs.rows);
+        let mut out = Matrix::zeros(self.rows, rhs.cols);
+        for i in 0..self.rows {
+            for j in 0..self.cols {
+                for k in 0..rhs.cols {
+                    out.data[(i * rhs.cols) + k] = out.data[(i * rhs.cols) + k].wrapping_add(
+                        self.data[(i * self.cols) + j].wrapping_mul(rhs.data[(j * rhs.cols) + k]),
+                    );
+                }
+            }
+        }
         out
     }
 
@@ -369,7 +390,45 @@ impl Matrix {
     }
 
     pub fn transpose(&self) -> Matrix {
-        todo!()
+        let mut out = Matrix::zeros(self.cols, self.rows);
+
+        for i in 0..self.rows {
+            for j in 0..self.cols {
+                out.data[i + j * self.rows] = self.data[j + i * self.cols];
+            }
+        }
+
+        out
+    }
+
+    pub fn expand(&self, delta: usize, p: u32) -> Matrix {
+        let mut out = Matrix::zeros(self.rows * delta, self.cols);
+
+        for i in 0..self.rows {
+            for j in 0..self.cols {
+                let mut val = self.data[i * self.cols + j];
+                for k in 0..delta {
+                    out.data[(i * delta + k) * self.cols + j] = val % p;
+                    val /= p;
+                }
+            }
+        }
+
+        out
+    }
+
+    pub fn concat_cols(&self, concat: usize) -> Matrix {
+        let mut out = Matrix::zeros(self.rows * concat, self.cols / concat);
+
+        for i in 0..self.rows {
+            for j in 0..self.cols {
+                let r = i + self.rows * (j % concat);
+                let c = j / concat;
+                out.data[r * self.cols / concat + c] = self.data[i * self.cols + j];
+            }
+        }
+
+        out
     }
 
     fn print_dims(&self) {
