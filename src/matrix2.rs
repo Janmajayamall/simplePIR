@@ -101,6 +101,31 @@ impl Matrix {
         out
     }
 
+    /// [from,to)
+    pub fn select_rows(&self, offset: usize, num_rows: usize) -> Matrix {
+        assert!(offset <= self.rows);
+
+        if offset == self.rows {
+            return Matrix {
+                rows: self.rows,
+                cols: self.cols,
+                data: self.data.clone(),
+            };
+        }
+
+        if offset + num_rows <= self.rows {
+            let mut out = Matrix::zeros(num_rows, self.cols);
+            out.data
+                .copy_from_slice(&self.data[offset * self.cols..(offset + num_rows) * self.cols]);
+            return out;
+        }
+
+        let mut out = Matrix::zeros((self.rows - offset) * self.cols, self.cols);
+        out.data
+            .copy_from_slice(&self.data[offset * self.cols..(self.rows) * self.cols]);
+        return out;
+    }
+
     pub fn concat_matrix(&mut self, other: &Matrix) {
         assert!(self.cols == other.cols);
         self.data.extend_from_slice(&other.data);
@@ -174,24 +199,26 @@ impl Matrix {
     }
 
     //TODO: make this fast
-    pub fn matrix_mul_vec_packed(&self, v: &Matrix, basis: usize, delta: usize) -> Matrix {
-        assert_eq!(self.cols * delta, v.rows);
-        assert_eq!(v.cols, 1);
+    pub fn _matrix_mul_vec_packed(
+        o: &mut [u32],
+        a: &[u32],
+        b: &[u32],
+        a_rows: usize,
+        a_cols: usize,
+        basis: usize,
+        delta: usize,
+    ) {
+        // assert_eq!(self.cols * delta, v.rows);
+        // assert_eq!(v.cols, 1);
         assert_eq!(basis, 10);
         assert_eq!(delta, 3);
-
-        let mut out = Matrix::zeros(self.rows + 8, 1);
-
-        let o: &mut [u32] = &mut out.data;
-        let a: &[u32] = self.data.as_ref();
-        let b: &[u32] = v.data.as_ref();
 
         let (mut db, mut db2, mut db3, mut db4, mut db5, mut db6, mut db7, mut db8);
         let (mut val, mut val2, mut val3, mut val4, mut val5, mut val6, mut val7, mut val8);
         let (mut tmp, mut tmp2, mut tmp3, mut tmp4, mut tmp5, mut tmp6, mut tmp7, mut tmp8);
         let mut index = 0;
 
-        for i in (0..self.rows).step_by(8) {
+        for i in (0..a_rows).step_by(8) {
             tmp = 0u32;
             tmp2 = 0u32;
             tmp3 = 0u32;
@@ -202,15 +229,15 @@ impl Matrix {
             tmp8 = 0u32;
 
             let mut index2 = 0;
-            for j in (0..self.cols) {
+            for j in (0..a_cols) {
                 db = a[index];
-                db2 = a[index + self.cols];
-                db3 = a[index + 2 * self.cols];
-                db4 = a[index + 3 * self.cols];
-                db5 = a[index + 4 * self.cols];
-                db6 = a[index + 5 * self.cols];
-                db7 = a[index + 6 * self.cols];
-                db8 = a[index + 7 * self.cols];
+                db2 = a[index + a_cols];
+                db3 = a[index + 2 * a_cols];
+                db4 = a[index + 3 * a_cols];
+                db5 = a[index + 4 * a_cols];
+                db6 = a[index + 5 * a_cols];
+                db7 = a[index + 6 * a_cols];
+                db8 = a[index + 7 * a_cols];
 
                 val = db & MASK;
                 val2 = db2 & MASK;
@@ -267,7 +294,7 @@ impl Matrix {
                 index2 += 1;
                 index += 1;
             }
-            index += self.cols * 7;
+            index += a_cols * 7;
             o[i] = tmp;
             o[i + 1] = tmp2;
             o[i + 2] = tmp3;
@@ -276,6 +303,43 @@ impl Matrix {
             o[i + 5] = tmp6;
             o[i + 6] = tmp7;
             o[i + 7] = tmp8;
+        }
+    }
+
+    //TODO: make this fast
+    pub fn matrix_mul_vec_packed(&self, v: &Matrix, basis: usize, delta: usize) -> Matrix {
+        assert_eq!(self.cols * delta, v.rows);
+        assert_eq!(v.cols, 1);
+        assert_eq!(basis, 10);
+        assert_eq!(delta, 3);
+
+        let mut out = Matrix::zeros(self.rows + 8, 1);
+
+        let a_rows_floor = self.rows / 8;
+
+        Matrix::_matrix_mul_vec_packed(
+            &mut out.data,
+            &self.data,
+            &v.data,
+            a_rows_floor,
+            self.cols,
+            basis,
+            delta,
+        );
+
+        if a_rows_floor < self.rows {
+            let mut eight_rows = vec![0u32; 8 * self.cols];
+            eight_rows[..((self.rows - a_rows_floor) * self.cols)]
+                .copy_from_slice(&self.data[a_rows_floor * self.cols..]);
+            Matrix::_matrix_mul_vec_packed(
+                &mut out.data[a_rows_floor..],
+                &eight_rows,
+                &v.data,
+                8,
+                self.cols,
+                basis,
+                delta,
+            );
         }
 
         out.drop_rows(8);
@@ -361,7 +425,7 @@ impl Matrix {
             }
         }
 
-        todo!()
+        out
     }
 
     pub fn transpose_and_expand_and_concat_cols_and_squish(
@@ -432,7 +496,7 @@ impl Matrix {
         out
     }
 
-    fn print_dims(&self) {
+    pub fn print_dims(&self) {
         println!("{} x {}: {}", self.rows, self.cols, self.data.len());
     }
 }
@@ -455,8 +519,8 @@ mod tests {
     #[test]
     fn test_matrix_mul_vec_packed() {
         let mut rng = thread_rng();
-        let a = Matrix::random(1024, 1024, 8, &mut rng);
-        let mut b = Matrix::random(1024, 1, 32, &mut rng);
+        let a = Matrix::random(1, 65536, 8, &mut rng);
+        let mut b = Matrix::random(65536, 1, 32, &mut rng);
 
         let c = a.matrix_mul_vec(&b);
 
@@ -485,4 +549,10 @@ mod tests {
         let a2 = a.transpose_and_expand_and_concat_cols_and_squish(256, 4, 3, 10, 3);
         a2.print_dims();
     }
+
+    // #[test]
+    // fn trial() {
+    //     let f = vec![0,1,2,3,4];
+    //     f.iter()
+    // }
 }

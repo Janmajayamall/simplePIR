@@ -207,7 +207,7 @@ fn main() {
     let db = Database::random(n_entries, row_length, &params);
     dbg!("db ready");
 
-    let indices = vec![1, 23];
+    let indices = vec![1, 0];
     let query_count = indices.len();
     let batch_size = db.data.rows / (query_count * db.db_info.ne) * db.data.cols;
 
@@ -227,4 +227,6 @@ fn main() {
         client_states.push(st);
         msgs.push(msg);
     }
+
+    pir.answer(msgs);
 }

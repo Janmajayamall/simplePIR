@@ -25,10 +25,10 @@ pub struct Msg {
 }
 
 pub struct DoublePir {
-    params: Params,
-    db: Database,
-    state: State,
-    msg: Msg,
+    pub params: Params,
+    pub db: Database,
+    pub state: State,
+    pub msg: Msg,
 }
 impl DoublePir {
     pub fn init_shared_state<R: CryptoRng + RngCore>(rng: &mut R) -> SharedState {
@@ -118,10 +118,20 @@ impl DoublePir {
         let mut query1 = a1.mul(&sk1).add(&err1);
         query1.data[col] += self.params.delta();
 
+        if query1.rows % 3 != 0 {
+            let zeros = Matrix::zeros(3 - (query1.rows % 3), 1);
+            query1.concat_matrix(&zeros);
+        }
+
         let err2 = Matrix::gaussian(self.params.l / self.db.db_info.x, 1, 10, &mut rng);
         let sk2 = Matrix::random(self.params.n, 1, 1 << self.params.logq, &mut rng);
         let mut query2 = a2.mul(&sk2).add(&err2);
         query2.data[row] += self.params.delta();
+
+        if query2.rows % 3 != 0 {
+            let zeros = Matrix::zeros(3 - (query2.rows % 3), 1);
+            query2.concat_matrix(&zeros);
+        }
 
         let state = State {
             data: vec![sk1, sk2],
@@ -133,7 +143,46 @@ impl DoublePir {
         (state, msg)
     }
 
-    pub fn answer() {}
+    pub fn answer(&self, msgs: Vec<Msg>) -> (Matrix, Vec<Msg>) {
+        let batch_size = self.db.data.rows / msgs.len();
+
+        let mut ans1 = Matrix::zeros(0, 1);
+        let last = 0;
+        for i in 0..batch_size {
+            let q1 = &msgs[i].data[0];
+
+            let a1 = self.db.data.select_rows(last, batch_size);
+            a1.print_dims();
+            q1.print_dims();
+            let a1 = a1.matrix_mul_vec_packed(q1, 10, 3);
+
+            ans1.concat_matrix(&a1);
+        }
+        let ans1 = ans1.transpose_and_expand_and_concat_cols_and_squish(
+            self.db.db_info.p,
+            self.params.delta_expansion(),
+            self.db.db_info.ne,
+            10,
+            3,
+        );
+
+        let h1 = &self.state.data[0];
+        let a2_transposed = &self.state.data[1];
+
+        let h2 = ans1.matrix_mul_transposed_packed(a2_transposed, 10, 3);
+
+        let mut msgs: Vec<Msg> = vec![];
+        for i in 0..batch_size {
+            let q2 = &msgs[i].data[1];
+            let h = h1.matrix_mul_vec_packed(q2, 10, 3);
+            let ans2 = ans1.matrix_mul_vec_packed(q2, 10, 3);
+            msgs.push(Msg {
+                data: vec![h, ans2],
+            })
+        }
+
+        (h2, msgs)
+    }
 
     pub fn recover() {}
 }
