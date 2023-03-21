@@ -196,10 +196,35 @@ fn simple_pir() {
 }
 
 fn main() {
-    let n_entries = 1 << 28;
-    let row_length = 8;
+    let n_entries = 1 << 20;
+    let row_length = 1;
     let n = 1 << 10;
     let logq = 32;
+
     let params = DoublePir::pick_params(n_entries, row_length, n, logq);
+    dbg!(&params);
+
     let db = Database::random(n_entries, row_length, &params);
+    dbg!("db ready");
+
+    let indices = vec![1, 23];
+    let query_count = indices.len();
+    let batch_size = db.data.rows / (query_count * db.db_info.ne) * db.data.cols;
+
+    let mut rng = thread_rng();
+    let shared_state = DoublePir::init_shared_state(&mut rng);
+
+    let (a1, a2) = DoublePir::ret_shared_state(&shared_state, &params, &db);
+
+    let pir = DoublePir::setup(db, &params, &shared_state);
+
+    // query
+    let mut client_states = vec![];
+    let mut msgs = vec![];
+    for i in 0..indices.len() {
+        let index_to_query = indices[i] + batch_size * i;
+        let (st, msg) = pir.query(index_to_query, &a1, &a2);
+        client_states.push(st);
+        msgs.push(msg);
+    }
 }

@@ -2,6 +2,20 @@ use rand::thread_rng;
 
 use crate::matrix2::Matrix;
 
+/// log(n),log(m),log(q),sigma,log(p_simple),p_simple,p_double
+const PARAMS: [(usize, usize, usize, f64, usize, u32, u32); 9] = [
+    (10, 13, 32, 6.400000, 9, 991, 929),
+    (10, 14, 32, 6.400000, 9, 833, 781),
+    (10, 15, 32, 6.400000, 9, 701, 657),
+    (10, 16, 32, 6.400000, 9, 589, 552),
+    (10, 17, 32, 6.400000, 8, 495, 464),
+    (10, 18, 32, 6.400000, 8, 416, 390),
+    (10, 19, 32, 6.400000, 8, 350, 328),
+    (10, 20, 32, 6.400000, 8, 294, 276),
+    (10, 21, 32, 6.400000, 7, 247, 231),
+];
+
+#[derive(Debug)]
 pub struct DatabaseInfo {
     /// Number of DB entries
     pub n_entries: usize,
@@ -72,11 +86,12 @@ impl Database {
             3,
         );
 
-        let mut rng = thread_rng();
-        let data = Matrix::random(params.l, params.m, db_info.logq, &mut rng);
-
+        dbg!(&db_info);
         assert!(params.l * params.m >= db_elements);
         assert!(params.l % db_info.ne == 0);
+
+        let mut rng = thread_rng();
+        let data = Matrix::random(params.l, params.m, db_info.p as u64, &mut rng);
 
         Database { db_info, data }
     }
@@ -142,6 +157,7 @@ impl Database {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct Params {
     /// LWE secret dimension
     pub n: usize,
@@ -158,11 +174,39 @@ pub struct Params {
 }
 
 impl Params {
-    pub fn pick_params(l: usize, m: usize) -> Params {
-        todo!()
+    pub fn pick_params(n: usize, logq: usize, l: usize, m: usize) -> Params {
+        assert!(n != 0);
+        assert!(logq != 0);
+
+        let num_samples = l.max(m);
+
+        for params in PARAMS {
+            // find params that exactly matches LWE security parameter `n`
+            // AND
+            // holds 128 bit security after revealing `num_samples` samples
+            // AND
+            // ciphertext modulus matches desired ciphertext modulus `1<<logq`
+            if n == (1 << params.0) && num_samples <= (1 << params.1) && logq == params.2 {
+                return Params {
+                    n,
+                    sigma: params.3,
+                    l,
+                    m,
+                    logq,
+                    ///TODO: remove double pir assumption
+                    p: params.6,
+                };
+            }
+        }
+        panic!("No suitable params known")
     }
 
-    pub fn delta(&self) -> usize {
+    pub fn delta_expansion(&self) -> usize {
         (self.logq as f64 / (self.p as f64).log2()).ceil() as usize
+    }
+
+    /// Scaling factor
+    pub fn delta(&self) -> u32 {
+        ((1u64 << self.logq) / (self.p as u64)) as u32
     }
 }

@@ -29,18 +29,15 @@ impl Matrix {
         }
     }
 
-    pub fn random<R: RngCore + CryptoRng>(
-        rows: usize,
-        cols: usize,
-        modp: usize,
-        rng: &mut R,
-    ) -> Matrix {
-        let p = ((1u64 << modp) - 1) as u32;
+    pub fn random<R: RngCore + CryptoRng>(rows: usize, cols: usize, p: u64, rng: &mut R) -> Matrix {
         let mut out = Matrix::zeros(rows, cols);
-        let distr = Uniform::new(0, p);
-        out.data.iter_mut().for_each(|v| {
-            *v = rng.sample(distr);
-        });
+        let distr = Uniform::new_inclusive(0, (p - 1) as u32);
+        out.data.copy_from_slice(
+            rng.sample_iter(distr)
+                .take(rows * cols)
+                .collect::<Vec<u32>>()
+                .as_slice(),
+        );
         out
     }
 
@@ -121,6 +118,10 @@ impl Matrix {
         self.rows -= rows;
     }
 
+    pub fn set_at(&mut self, row: usize, col: usize, value: u32) {
+        self.data[self.cols * row + col] = value;
+    }
+
     ///TODO: make inplace version
     pub fn add(&self, rhs: &Matrix) -> Matrix {
         assert_eq!(self.rows, rhs.rows);
@@ -128,7 +129,7 @@ impl Matrix {
         let mut out = Matrix::zeros(self.rows, self.cols);
 
         izip!(out.data.iter_mut(), self.data.iter(), rhs.data.iter()).for_each(|(o, l, r)| {
-            *o = *l + *r;
+            *o = l.wrapping_add(*r);
         });
         out
     }
@@ -140,7 +141,7 @@ impl Matrix {
         let mut out = Matrix::zeros(self.rows, self.cols);
 
         izip!(out.data.iter_mut(), self.data.iter(), rhs.data.iter()).for_each(|(o, l, r)| {
-            *o = *l - *r;
+            *o = l.wrapping_sub(*r);
         });
         out
     }
