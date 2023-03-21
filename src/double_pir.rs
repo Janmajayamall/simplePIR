@@ -66,12 +66,13 @@ impl DoublePir {
         h1 = h1.squish(10, 3);
 
         // pad with zero rows to accommodate packed multiplication with delta 3
-        if a2.rows % 3 == 0 {
+        dbg!(a2.print_dims());
+        if a2.rows % 3 != 0 {
             let zeros = Matrix::zeros(3 - (a2.rows % 3), a2.cols);
             a2.concat_matrix(&zeros);
         }
         a2 = a2.transpose();
-
+        dbg!(a2.print_dims());
         let state = State { data: vec![h1, a2] };
         let msg = Msg { data: vec![h2] };
         DoublePir {
@@ -145,19 +146,18 @@ impl DoublePir {
 
     pub fn answer(&self, msgs: Vec<Msg>) -> (Matrix, Vec<Msg>) {
         let batch_size = self.db.data.rows / msgs.len();
-
+        dbg!(batch_size);
         let mut ans1 = Matrix::zeros(0, 1);
         let last = 0;
         for i in 0..batch_size {
             let q1 = &msgs[i].data[0];
 
             let a1 = self.db.data.select_rows(last, batch_size);
-            a1.print_dims();
-            q1.print_dims();
             let a1 = a1.matrix_mul_vec_packed(q1, 10, 3);
 
             ans1.concat_matrix(&a1);
         }
+        dbg!(ans1.print_dims());
         let ans1 = ans1.transpose_and_expand_and_concat_cols_and_squish(
             self.db.db_info.p,
             self.params.delta_expansion(),
@@ -165,23 +165,25 @@ impl DoublePir {
             10,
             3,
         );
+        dbg!(ans1.print_dims());
 
         let h1 = &self.state.data[0];
+        dbg!(h1.print_dims());
         let a2_transposed = &self.state.data[1];
-
+        dbg!(a2_transposed.print_dims());
         let h2 = ans1.matrix_mul_transposed_packed(a2_transposed, 10, 3);
 
-        let mut msgs: Vec<Msg> = vec![];
+        let mut ans_msgs: Vec<Msg> = vec![];
         for i in 0..batch_size {
             let q2 = &msgs[i].data[1];
             let h = h1.matrix_mul_vec_packed(q2, 10, 3);
             let ans2 = ans1.matrix_mul_vec_packed(q2, 10, 3);
-            msgs.push(Msg {
+            ans_msgs.push(Msg {
                 data: vec![h, ans2],
             })
         }
 
-        (h2, msgs)
+        (h2, ans_msgs)
     }
 
     pub fn recover() {}

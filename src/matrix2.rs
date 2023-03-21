@@ -315,8 +315,7 @@ impl Matrix {
 
         let mut out = Matrix::zeros(self.rows + 8, 1);
 
-        let a_rows_floor = self.rows / 8;
-
+        let a_rows_floor = (self.rows / 8) * 8;
         Matrix::_matrix_mul_vec_packed(
             &mut out.data,
             &self.data,
