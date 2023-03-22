@@ -1,7 +1,10 @@
 use itertools::izip;
 use rand::{distributions::Uniform, CryptoRng, Rng, RngCore};
 
-use crate::utils::sample_vec_cbd;
+use crate::{
+    database::Params,
+    utils::{reconstruct_val_from_basep, sample_vec_cbd},
+};
 
 // Hard coded for compiler optimization
 const COMPRESSION: usize = 3;
@@ -101,7 +104,12 @@ impl Matrix {
         out
     }
 
-    /// [from,to)
+    pub fn scale_down(&mut self, delta: u64) {
+        self.data
+            .iter_mut()
+            .for_each(|v| *v = ((*v as u64 + delta / 2) / delta) as u32)
+    }
+
     pub fn select_rows(&self, offset: usize, num_rows: usize) -> Matrix {
         assert!(offset <= self.rows);
 
@@ -478,6 +486,20 @@ impl Matrix {
             }
         }
 
+        out
+    }
+
+    pub fn contract(&self, delta: usize, p: u32) -> Matrix {
+        let mut out = Matrix::zeros(self.rows / delta, self.cols);
+        for i in 0..out.rows {
+            for j in 0..out.cols {
+                let mut parts = vec![];
+                for k in 0..delta {
+                    parts.push(self.data[(i * delta + k) * self.cols + j] as u64);
+                }
+                out.data[i * out.cols + j] += reconstruct_val_from_basep(p as u64, &parts);
+            }
+        }
         out
     }
 

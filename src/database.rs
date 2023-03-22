@@ -209,4 +209,9 @@ impl Params {
     pub fn delta(&self) -> u32 {
         ((1u64 << self.logq) / (self.p as u64)) as u32
     }
+
+    pub fn scale_down(&self, v: u32) -> u32 {
+        let delta = self.delta() as u64;
+        ((v as u64 + delta / 2) / delta) as u32
+    }
 }

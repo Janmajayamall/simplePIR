@@ -228,5 +228,7 @@ fn main() {
         msgs.push(msg);
     }
 
-    pir.answer(msgs);
+    let (h2_p2, ans_msgs) = pir.answer(msgs);
+    let h2_p1 = &pir.msg.data[0];
+    pir.recover(h2_p1, &h2_p2, client_states, ans_msgs);
 }

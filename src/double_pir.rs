@@ -1,3 +1,5 @@
+use std::ops::Add;
+
 use ndarray::Data;
 use rand::{thread_rng, CryptoRng, RngCore, SeedableRng};
 use rand_chacha::ChaCha8Rng;
@@ -21,7 +23,7 @@ pub struct State {
 }
 
 pub struct Msg {
-    data: Vec<Matrix>,
+    pub data: Vec<Matrix>,
 }
 
 pub struct DoublePir {
@@ -146,16 +148,18 @@ impl DoublePir {
 
     pub fn answer(&self, msgs: Vec<Msg>) -> (Matrix, Vec<Msg>) {
         let batch_size = self.db.data.rows / msgs.len();
-        dbg!(batch_size);
+        let batch_count = msgs.len();
+        dbg!(batch_size, batch_count);
         let mut ans1 = Matrix::zeros(0, 1);
-        let last = 0;
-        for i in 0..batch_size {
+        let mut last = 0;
+        for i in 0..batch_count {
             let q1 = &msgs[i].data[0];
 
             let a1 = self.db.data.select_rows(last, batch_size);
             let a1 = a1.matrix_mul_vec_packed(q1, 10, 3);
 
             ans1.concat_matrix(&a1);
+            last += batch_size;
         }
         dbg!(ans1.print_dims());
         let ans1 = ans1.transpose_and_expand_and_concat_cols_and_squish(
@@ -174,7 +178,7 @@ impl DoublePir {
         let h2 = ans1.matrix_mul_transposed_packed(a2_transposed, 10, 3);
 
         let mut ans_msgs: Vec<Msg> = vec![];
-        for i in 0..batch_size {
+        for i in 0..batch_count {
             let q2 = &msgs[i].data[1];
             let h = h1.matrix_mul_vec_packed(q2, 10, 3);
             let ans2 = ans1.matrix_mul_vec_packed(q2, 10, 3);
@@ -186,5 +190,42 @@ impl DoublePir {
         (h2, ans_msgs)
     }
 
-    pub fn recover() {}
+    pub fn recover(
+        &self,
+        h2_p1: &Matrix,
+        h2_p2: &Matrix,
+        client_states: Vec<State>,
+        msgs: Vec<Msg>,
+    ) {
+        let batch_count = client_states.len();
+
+        for i in 0..batch_count {
+            // let a2_sk2 = a2.mul(&client_states[i].data[1]);
+            let tmp1 = h2_p1.mul(&client_states[i].data[1]);
+            let tmp2 = h2_p2.mul(&client_states[i].data[1]);
+            let mut h = msgs[i].data[0].sub(&tmp1);
+            let mut ans = msgs[i].data[1].sub(&tmp2);
+            h.scale_down(self.params.delta() as u64);
+            ans.scale_down(self.params.delta() as u64);
+
+            h = h.contract(self.params.delta_expansion(), self.params.p);
+            ans = ans.contract(self.params.delta_expansion(), self.params.p);
+
+            h.print_dims();
+            ans.print_dims();
+
+            let mut inner_product: u32 = 0;
+            h.data
+                .iter()
+                .zip(client_states[i].data[0].data.iter())
+                .for_each(|(v, s)| {
+                    inner_product = inner_product.wrapping_add(v.wrapping_mul(*s));
+                });
+
+            let d = self
+                .params
+                .scale_down(ans.data[0].wrapping_sub(inner_product));
+            dbg!(d);
+        }
+    }
 }

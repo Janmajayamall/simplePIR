@@ -35,3 +35,13 @@ pub fn sample_vec_cbd<R: RngCore + CryptoRng>(
 
     Ok(out)
 }
+
+pub fn reconstruct_val_from_basep(p: u64, values: &[u64]) -> u32 {
+    let mut res = 0;
+    let mut coeff = 1u64;
+    values.iter().for_each(|v| {
+        res += coeff * v;
+        coeff *= p;
+    });
+    res as u32
+}
