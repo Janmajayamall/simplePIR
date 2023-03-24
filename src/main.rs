@@ -197,7 +197,7 @@ fn simple_pir() {
 
 fn main() {
     let n_entries = 1 << 20;
-    let row_length = 1;
+    let row_length = 256;
     let n = 1 << 10;
     let logq = 32;
 

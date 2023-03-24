@@ -1,5 +1,6 @@
 use std::ops::Add;
 
+use itertools::Itertools;
 use ndarray::Data;
 use rand::{thread_rng, CryptoRng, RngCore, SeedableRng};
 use rand_chacha::ChaCha8Rng;
@@ -7,6 +8,7 @@ use rand_chacha::ChaCha8Rng;
 use crate::{
     database::{self, Params},
     matrix2::Matrix,
+    utils::reconstruct_val_from_basep,
 };
 
 use super::database::Database;
@@ -213,19 +215,25 @@ impl DoublePir {
 
             h.print_dims();
             ans.print_dims();
+            dbg!(self.params.l / self.db.db_info.ne);
 
-            let mut inner_product: u32 = 0;
-            h.data
-                .iter()
-                .zip(client_states[i].data[0].data.iter())
-                .for_each(|(v, s)| {
-                    inner_product = inner_product.wrapping_add(v.wrapping_mul(*s));
-                });
-
-            let d = self
-                .params
-                .scale_down(ans.data[0].wrapping_sub(inner_product));
-            dbg!(d);
+            let values = h
+                .data
+                .chunks(self.params.l / self.db.db_info.ne)
+                .zip(ans.data.iter())
+                .map(|(h_chunks, a)| {
+                    let mut inner_product: u32 = 0;
+                    h_chunks
+                        .iter()
+                        .zip(client_states[i].data[0].data.iter())
+                        .for_each(|(v, s)| {
+                            inner_product = inner_product.wrapping_add(v.wrapping_mul(*s));
+                        });
+                    self.params.scale_down(a.wrapping_sub(inner_product)) as u64
+                })
+                .collect_vec();
+            let v = reconstruct_val_from_basep(self.db.db_info.p as u64, &values);
+            dbg!(v);
         }
     }
 }
