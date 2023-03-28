@@ -384,7 +384,7 @@ impl Matrix {
             }
         } else {
             let (mut tmp, mut tmp2, mut tmp3, mut tmp4, mut tmp5, mut tmp6, mut tmp7, mut tmp8);
-            for j in 0..rhs.rows {
+            for j in (0..rhs.rows).step_by(8) {
                 let mut index1 = 0;
                 for i in 0..self.rows {
                     let mut index2 = 0;
@@ -415,7 +415,6 @@ impl Matrix {
                                 tmp7.wrapping_add(val.wrapping_mul(b[index2 + (j + 6) * rhs.cols]));
                             tmp8 =
                                 tmp8.wrapping_add(val.wrapping_mul(b[index2 + (j + 7) * rhs.cols]));
-
                             index2 += 1;
                         }
                         index1 += 1;
@@ -556,10 +555,10 @@ mod tests {
     #[test]
     fn test_matrix_mul_transposed() {
         let mut rng = thread_rng();
-        let a = Matrix::random(1024, 1024, 8, &mut rng);
+        let a = Matrix::random(16, 129, 8, &mut rng);
 
         let a_squished = a.squish(10, 3);
-        let mut b = Matrix::random(1024, 1024, 32, &mut rng);
+        let mut b = Matrix::random(1024, 129, 32, &mut rng);
         let c2 = a_squished.matrix_mul_transposed_packed(&b, 10, 3);
     }
 

@@ -24,8 +24,28 @@ pub struct State {
     data: Vec<Matrix>,
 }
 
+impl State {
+    pub fn size(&self) -> usize {
+        let mut sum = 0;
+        self.data.iter().for_each(|m| {
+            sum += m.data.len();
+        });
+        sum
+    }
+}
+
 pub struct Msg {
     pub data: Vec<Matrix>,
+}
+
+impl Msg {
+    pub fn size(&self) -> usize {
+        let mut sum = 0;
+        self.data.iter().for_each(|m| {
+            sum += m.data.len();
+        });
+        sum
+    }
 }
 
 pub struct DoublePir {
@@ -65,20 +85,20 @@ impl DoublePir {
         h1 = h1.expand(params.delta_expansion(), params.p);
         h1 = h1.concat_cols(db.db_info.ne);
         let h2 = h1.mul(&a2);
+        dbg!(h2.print_dims());
 
         db.squish(10, 3);
         h1 = h1.squish(10, 3);
 
         // pad with zero rows to accommodate packed multiplication with delta 3
-        dbg!(a2.print_dims());
         if a2.rows % 3 != 0 {
             let zeros = Matrix::zeros(3 - (a2.rows % 3), a2.cols);
             a2.concat_matrix(&zeros);
         }
         a2 = a2.transpose();
-        dbg!(a2.print_dims());
         let state = State { data: vec![h1, a2] };
         let msg = Msg { data: vec![h2] };
+
         DoublePir {
             db,
             state,
@@ -151,7 +171,7 @@ impl DoublePir {
     pub fn answer(&self, msgs: Vec<Msg>) -> (Matrix, Vec<Msg>) {
         let batch_size = self.db.data.rows / msgs.len();
         let batch_count = msgs.len();
-        dbg!(batch_size, batch_count);
+
         let mut ans1 = Matrix::zeros(0, 1);
         let mut last = 0;
         for i in 0..batch_count {
@@ -163,7 +183,6 @@ impl DoublePir {
             ans1.concat_matrix(&a1);
             last += batch_size;
         }
-        dbg!(ans1.print_dims());
         let ans1 = ans1.transpose_and_expand_and_concat_cols_and_squish(
             self.db.db_info.p,
             self.params.delta_expansion(),
@@ -171,12 +190,9 @@ impl DoublePir {
             10,
             3,
         );
-        dbg!(ans1.print_dims());
 
         let h1 = &self.state.data[0];
-        dbg!(h1.print_dims());
         let a2_transposed = &self.state.data[1];
-        dbg!(a2_transposed.print_dims());
         let h2 = ans1.matrix_mul_transposed_packed(a2_transposed, 10, 3);
 
         let mut ans_msgs: Vec<Msg> = vec![];

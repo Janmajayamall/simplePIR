@@ -86,7 +86,9 @@ impl Database {
             3,
         );
 
-        dbg!(&db_info);
+        let packed_db_size =
+            ((params.l * params.m) as f64 * (params.p as f64).log2()) / (8.0 * 1024.0 * 1024.0);
+        println!("Packed DB size: {} Mb", packed_db_size);
         assert!(params.l * params.m >= db_elements);
         assert!(params.l % db_info.ne == 0);
 
@@ -137,7 +139,7 @@ impl Database {
         (l, m)
     }
 
-    /// Returns number of Z_p elements needed for n_elements DB entries
+    /// Returns number of Z_p elements needed for n_entries
     pub fn number_db_entries(n_entries: usize, row_length: usize, p: u32) -> (usize, usize, usize) {
         if (row_length as f64) <= (p as f64).log2() {
             let no_of_elems = ((p as f64).log2() / row_length as f64).floor();

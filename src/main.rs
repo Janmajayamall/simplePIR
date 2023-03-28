@@ -195,17 +195,51 @@ fn simple_pir() {
     }
 }
 
+fn estimate_cost(n_entries: usize, row_length: usize, n: usize, logq: usize, qc: f64) {
+    let params = DoublePir::pick_params(n_entries, row_length, n, logq);
+    println!("Params: {:?}", params);
+
+    let (_, ne, _) = Database::number_db_entries(n_entries, row_length, params.p);
+
+    let d = ne as f64;
+    println!("d: {d}");
+    let k = (params.logq as f64 / (params.p as f64).log2()).ceil();
+    let n = params.n as f64;
+    let logq = logq as f64;
+    let l = params.l as f64;
+    let m = params.m as f64;
+
+    // offline download size
+    // d * k * n^2
+    let offline_download_size = (d * k * n * n * logq) / 8.0 / 1024.0 / 1024.0;
+    println!("Offline download size: {} Mb", offline_download_size);
+
+    // online upload size
+    // (m + l/d) * qc
+    let online_upload_size = (m + l / d) * logq * qc / 8.0 / 1024.0;
+    println!("Online upload size: {} Kb", online_upload_size);
+
+    // online download size
+    // dkn + qc(dkn + dk)
+    let online_upload_size = ((d * k * n) + qc * (d * k * n + d * k)) * logq / 8.0 / 1024.0;
+    println!("Online download size: {} Kb", online_upload_size);
+}
+
 fn main() {
-    let n_entries = 1 << 20;
-    let row_length = 256;
+    // return;
+    let n_entries = 100000000;
+    let row_length = 32;
     let n = 1 << 10;
     let logq = 32;
 
+    estimate_cost(n_entries, row_length, n, logq, 2.0);
+    return;
+
     let params = DoublePir::pick_params(n_entries, row_length, n, logq);
-    dbg!(&params);
+    println!("Params: {:?}", params);
 
     let db = Database::random(n_entries, row_length, &params);
-    dbg!("db ready");
+    println!("Db Info: {:?}", db.db_info);
 
     let indices = vec![1, 0];
     let query_count = indices.len();
@@ -216,9 +250,14 @@ fn main() {
 
     let (a1, a2) = DoublePir::ret_shared_state(&shared_state, &params, &db);
 
+    println!("Setup...");
     let pir = DoublePir::setup(db, &params, &shared_state);
 
+    let clue_size = (pir.msg.size() as f64 * (params.logq as f64)) / 8.0 / 1024.0;
+    println!("Offline download size: {:?} Kb", clue_size);
+
     // query
+    println!("Query...");
     let mut client_states = vec![];
     let mut msgs = vec![];
     for i in 0..indices.len() {
@@ -228,7 +267,19 @@ fn main() {
         msgs.push(msg);
     }
 
+    let online_upload = msgs.iter().map(|m| m.size()).sum::<usize>();
+    let online_upload = (online_upload as f64 * (params.logq as f64)) / 8.0 / 1024.0;
+    println!("Online upload size: {:?} Kb", online_upload);
+
+    println!("Answer...");
     let (h2_p2, ans_msgs) = pir.answer(msgs);
+
+    let mut online_download = ans_msgs.iter().map(|m| m.size()).sum::<usize>();
+    online_download += h2_p2.data.len();
+    let online_download = (online_download as f64 * (params.logq as f64)) / 8.0 / 1024.0;
+    println!("Online download size: {:?} Kb", online_download);
+
     let h2_p1 = &pir.msg.data[0];
+    println!("Recovery...");
     pir.recover(h2_p1, &h2_p2, client_states, ans_msgs);
 }
