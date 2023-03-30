@@ -85,7 +85,6 @@ impl DoublePir {
         h1 = h1.expand(params.delta_expansion(), params.p);
         h1 = h1.concat_cols(db.db_info.ne);
         let h2 = h1.mul(&a2);
-        dbg!(h2.print_dims());
 
         db.squish(10, 3);
         h1 = h1.squish(10, 3);
@@ -132,14 +131,21 @@ impl DoublePir {
     }
 
     // returns client state and message
-    pub fn query(&self, index: usize, a1: &Matrix, a2: &Matrix) -> (State, Msg) {
+    pub fn query<R: CryptoRng + RngCore>(
+        &self,
+        index: usize,
+        a1: &Matrix,
+        a2: &Matrix,
+        rng: &mut R,
+    ) -> (State, Msg) {
         let row = index / self.params.m;
         let col = index % self.params.m;
+        dbg!(row, col, index);
 
-        let mut rng = thread_rng();
-
-        let err1 = Matrix::gaussian(self.params.m, 1, 10, &mut rng);
-        let sk1 = Matrix::random(self.params.n, 1, 1 << self.params.logq, &mut rng);
+        let err1 = Matrix::gaussian(self.params.m, 1, 10, rng);
+        // FIXME
+        // let err1 = Matrix::zeros(self.params.m, 1);
+        let sk1 = Matrix::random(self.params.n, 1, 1 << self.params.logq, rng);
         let mut query1 = a1.mul(&sk1).add(&err1);
         query1.data[col] += self.params.delta();
 
@@ -148,8 +154,10 @@ impl DoublePir {
             query1.concat_matrix(&zeros);
         }
 
-        let err2 = Matrix::gaussian(self.params.l / self.db.db_info.x, 1, 10, &mut rng);
-        let sk2 = Matrix::random(self.params.n, 1, 1 << self.params.logq, &mut rng);
+        let err2 = Matrix::gaussian(self.params.l / self.db.db_info.x, 1, 10, rng);
+        // FIXME
+        // let err2 = Matrix::zeros(self.params.l / self.db.db_info.x, 1);
+        let sk2 = Matrix::random(self.params.n, 1, 1 << self.params.logq, rng);
         let mut query2 = a2.mul(&sk2).add(&err2);
         query2.data[row] += self.params.delta();
 
@@ -174,6 +182,7 @@ impl DoublePir {
 
         let mut ans1 = Matrix::zeros(0, 1);
         let mut last = 0;
+        // TODO: take care of last batch
         for i in 0..batch_count {
             let q1 = &msgs[i].data[0];
 
@@ -214,9 +223,9 @@ impl DoublePir {
         h2_p2: &Matrix,
         client_states: Vec<State>,
         msgs: Vec<Msg>,
-    ) {
+    ) -> Vec<u32> {
         let batch_count = client_states.len();
-
+        let mut res = vec![];
         for i in 0..batch_count {
             // let a2_sk2 = a2.mul(&client_states[i].data[1]);
             let tmp1 = h2_p1.mul(&client_states[i].data[1]);
@@ -229,15 +238,17 @@ impl DoublePir {
             h = h.contract(self.params.delta_expansion(), self.params.p);
             ans = ans.contract(self.params.delta_expansion(), self.params.p);
 
-            h.print_dims();
-            ans.print_dims();
-            dbg!(self.params.l / self.db.db_info.ne);
-
+            assert!(
+                h.data.len() / self.params.n / self.db.db_info.ne
+                    == ans.data.len() / self.db.db_info.ne
+            );
+            // dbg!(h.data.chunks(self.db.db_info.ne).len());
             let values = h
                 .data
-                .chunks(self.params.l / self.db.db_info.ne)
+                .chunks_exact(self.params.n)
                 .zip(ans.data.iter())
                 .map(|(h_chunks, a)| {
+                    assert_eq!(h_chunks.len(), client_states[i].data[0].data.len());
                     let mut inner_product: u32 = 0;
                     h_chunks
                         .iter()
@@ -249,7 +260,10 @@ impl DoublePir {
                 })
                 .collect_vec();
             let v = reconstruct_val_from_basep(self.db.db_info.p as u64, &values);
-            dbg!(v);
+            res.push(v);
+
+            // dbg!(h.data.chunks(self.db.db_info.ne).len());
         }
+        res
     }
 }

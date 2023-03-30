@@ -1,4 +1,5 @@
-use rand::thread_rng;
+use rand::{thread_rng, CryptoRng, RngCore, SeedableRng};
+use rand_chacha::ChaChaRng;
 
 use crate::matrix2::Matrix;
 
@@ -71,7 +72,12 @@ pub struct Database {
 }
 
 impl Database {
-    pub fn random(n_entries: usize, row_length: usize, params: &Params) -> Database {
+    pub fn random<R: RngCore + CryptoRng>(
+        n_entries: usize,
+        row_length: usize,
+        params: &Params,
+        rng: &mut R,
+    ) -> Database {
         let (db_elements, elements_per_entry, entries_per_element) =
             Database::number_db_entries(n_entries, row_length, params.p);
         let db_info = DatabaseInfo::new(
@@ -92,8 +98,7 @@ impl Database {
         assert!(params.l * params.m >= db_elements);
         assert!(params.l % db_info.ne == 0);
 
-        let mut rng = thread_rng();
-        let data = Matrix::random(params.l, params.m, db_info.p as u64, &mut rng);
+        let data = Matrix::random(params.l, params.m, db_info.p as u64, rng);
 
         Database { db_info, data }
     }
@@ -124,6 +129,7 @@ impl Database {
         m_lower_bound: usize,
     ) -> (usize, usize) {
         let (l, m) = Database::approximate_square_database_dims(n_entries, row_length, p);
+
         if m >= m_lower_bound {
             return (l, m);
         }

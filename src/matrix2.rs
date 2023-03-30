@@ -12,10 +12,6 @@ const BASIS: usize = 10;
 const BASIS2: usize = BASIS * 2;
 const MASK: u32 = (1 << BASIS) - 1;
 
-/// 5. Get (row , col)
-/// 6. Set (row , col)
-/// 7. MatrixMulVec
-/// 8. MatrixMulVecPacked
 #[derive(PartialEq, Debug)]
 pub struct Matrix {
     pub rows: usize,
@@ -53,7 +49,8 @@ impl Matrix {
         let values = sample_vec_cbd(rows * cols, variance, rng)
             .expect("Sampling from gaussian distribution should work")
             .iter()
-            .map(|v| *v as u32)
+            // FIXME
+            .map(|v| 0)
             .collect::<Vec<u32>>();
         let mut out = Matrix::zeros(rows, cols);
         out.data.copy_from_slice(values.as_slice());
@@ -66,7 +63,6 @@ impl Matrix {
         assert!(delta == 3);
         assert!(basis == 10);
 
-        dbg!((self.cols + delta - 1) / delta);
         let mut out = Matrix::zeros(self.rows, (self.cols + delta - 1) / delta);
 
         for i in 0..out.rows {
@@ -130,8 +126,8 @@ impl Matrix {
 
         let mut out = Matrix::zeros((self.rows - offset) * self.cols, self.cols);
         out.data
-            .copy_from_slice(&self.data[offset * self.cols..(self.rows) * self.cols]);
-        return out;
+            .copy_from_slice(&self.data[offset * self.cols..(offset + num_rows) * self.cols]);
+        out
     }
 
     pub fn concat_matrix(&mut self, other: &Matrix) {
@@ -354,6 +350,7 @@ impl Matrix {
     }
 
     pub fn matrix_mul_transposed_packed(&self, rhs: &Matrix, basis: usize, delta: usize) -> Matrix {
+        assert!(self.cols * delta == rhs.cols);
         assert_eq!(basis, 10);
         assert_eq!(delta, 3);
 
@@ -518,6 +515,10 @@ impl Matrix {
 
     pub fn print_dims(&self) {
         println!("{} x {}: {}", self.rows, self.cols, self.data.len());
+    }
+
+    pub fn get(&self, row: usize, col: usize) -> u32 {
+        self.data[row * self.cols + col]
     }
 }
 

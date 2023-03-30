@@ -45,3 +45,11 @@ pub fn reconstruct_val_from_basep(p: u64, values: &[u64]) -> u32 {
     });
     res as u32
 }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn reconstruct() {
+        
+    }
+}
